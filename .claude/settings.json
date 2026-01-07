@@ -1,29 +1,39 @@
 {
+  "includeCoAuthoredBy": true,
+  "env": {
+    "INSIDE_CLAUDE_CODE": "1"
+  },
   "hooks": {
-    "PostToolUse": [
+    "PreToolUse": [
       {
-        "matcher": {
-          "toolName": "Write|Edit",
-          "event": "tool.result.success",
-          "filePath": "\\.py$"
-        },
+        "matcher": "Edit|MultiEdit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "cd /home/thein/repos/tta-solo && uv run ruff format \"$TOOL_INPUT_file_path\" 2>/dev/null || true"
+            "command": "# Prevent editing on main branch\n[ \"$(git branch --show-current)\" != \"main\" ] || { echo '{\"block\": true, \"message\": \"Cannot edit files on main branch. Create a feature branch first.\"}' >&2; exit 2; }",
+            "timeout": 5
           }
         ]
       }
     ],
-    "PreToolUse": [
+    "PostToolUse": [
       {
-        "matcher": {
-          "toolName": "Write|Edit"
-        },
+        "matcher": "Edit|MultiEdit|Write",
         "hooks": [
           {
             "type": "command",
-            "command": "[ \"$(cd /home/thein/repos/tta-solo && git branch --show-current)\" != \"main\" ] || { echo '{\"block\": true, \"message\": \"Cannot edit files on main branch. Create a feature branch first.\"}' >&2; exit 2; }"
+            "command": "# Auto-format Python files with Ruff\nif [[ \"$CLAUDE_TOOL_INPUT_FILE_PATH\" =~ \\.py$ ]]; then\n  cd /home/thein/repos/tta-solo && uv run ruff format \"$CLAUDE_TOOL_INPUT_FILE_PATH\" 2>/dev/null && echo '{\"feedback\": \"Formatted with Ruff.\", \"suppressOutput\": true}' || true\nfi",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "# Auto-run tests when test files change\nif [[ \"$CLAUDE_TOOL_INPUT_FILE_PATH\" =~ test_.*\\.py$ ]]; then\n  echo '{\"feedback\": \"Running related tests...\"}' >&2\n  cd /home/thein/repos/tta-solo && uv run pytest \"$CLAUDE_TOOL_INPUT_FILE_PATH\" -v --tb=short 2>&1 | tail -30\n  exit 0\nfi",
+            "timeout": 60
           }
         ]
       }
