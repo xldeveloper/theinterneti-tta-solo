@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": {
+          "toolName": "Write|Edit",
+          "event": "tool.result.success",
+          "filePath": "\\.py$"
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/thein/repos/tta-solo && uv run ruff format \"$TOOL_INPUT_file_path\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": {
+          "toolName": "Write|Edit"
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$(cd /home/thein/repos/tta-solo && git branch --show-current)\" != \"main\" ] || { echo '{\"block\": true, \"message\": \"Cannot edit files on main branch. Create a feature branch first.\"}' >&2; exit 2; }"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "Bash(dolt:*)",
+      "Bash(git:*)",
+      "Read(/home/thein/repos/tta-solo/**)"
+    ]
+  }
+}
