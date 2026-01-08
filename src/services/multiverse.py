@@ -88,7 +88,7 @@ class MergeProposal(BaseModel):
     validation_passed: bool = Field(default=False)
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     reviewed_at: datetime | None = None
     merged_at: datetime | None = None
 
