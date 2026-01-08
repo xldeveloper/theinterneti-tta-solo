@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from src.db.interfaces import DoltRepository, Neo4jRepository
 from src.models import (
+    Entity,
     Event,
     EventOutcome,
     EventType,
@@ -467,26 +468,31 @@ class MultiverseService:
         if not target.is_active():
             conflicts.append(f"Target universe is not active (status: {target.status})")
 
-        # Verify entities exist in source
+        # Verify entities exist in source and collect them by type
         self.dolt.checkout_branch(source.dolt_branch)
+        source_entities: dict[str, list[Entity]] = {}
         for entity_id in proposal.entity_ids:
             entity = self.dolt.get_entity(entity_id, proposal.source_universe_id)
             if entity is None:
                 conflicts.append(f"Entity {entity_id} not found in source universe")
             else:
-                # Check for name conflicts in target
-                self.dolt.checkout_branch(target.dolt_branch)
-                # Check if an entity with the same name already exists in the target
-                target_entities = self.dolt.get_entities_by_type(
-                    entity.type.value, proposal.target_universe_id
-                )
-                for target_entity in target_entities:
-                    if target_entity.name == entity.name:
-                        conflicts.append(
-                            f"Entity '{entity.name}' already exists in target universe"
-                        )
-                        break
-                self.dolt.checkout_branch(source.dolt_branch)
+                entity_type = entity.type.value
+                if entity_type not in source_entities:
+                    source_entities[entity_type] = []
+                source_entities[entity_type].append(entity)
+
+        # Check for name conflicts in target (fetch each type only once)
+        self.dolt.checkout_branch(target.dolt_branch)
+        for entity_type, entities in source_entities.items():
+            target_entities = self.dolt.get_entities_by_type(
+                entity_type, proposal.target_universe_id
+            )
+            target_names = {e.name for e in target_entities}
+            for entity in entities:
+                if entity.name in target_names:
+                    conflicts.append(
+                        f"Entity '{entity.name}' already exists in target universe"
+                    )
 
         return conflicts
 
