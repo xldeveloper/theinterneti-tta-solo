@@ -599,10 +599,16 @@ class MultiverseService:
         # Determine outcome based on merge results
         if entities_merged == 0:
             outcome = EventOutcome.FAILURE
+            narrative_summary = "Merge failed: no entities were successfully merged"
         elif entities_skipped > 0:
             outcome = EventOutcome.PARTIAL
+            narrative_summary = (
+                f"Partial merge: {entities_merged} entities merged, "
+                f"{entities_skipped} skipped. Merged: {', '.join(merged_names)}"
+            )
         else:
             outcome = EventOutcome.SUCCESS
+            narrative_summary = f"Content merged from alternate timeline: {', '.join(merged_names)}"
 
         # Record the merge event
         merge_event = Event(
@@ -617,7 +623,7 @@ class MultiverseService:
                 "entities_skipped": entities_skipped,
                 "entity_names": merged_names,
             },
-            narrative_summary=f"Content merged from alternate timeline: {', '.join(merged_names)}",
+            narrative_summary=narrative_summary,
         )
         self.dolt.append_event(merge_event)
 

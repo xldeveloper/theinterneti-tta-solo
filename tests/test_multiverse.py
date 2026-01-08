@@ -8,6 +8,7 @@ import pytest
 
 from src.db.memory import InMemoryDoltRepository, InMemoryNeo4jRepository
 from src.models import (
+    EventOutcome,
     EventType,
     UniverseStatus,
     create_character,
@@ -604,8 +605,6 @@ class TestMergeProposals:
         self, multiverse_service: MultiverseService
     ):
         """Merge event outcome should be SUCCESS when all entities merge successfully."""
-        from src.models import EventOutcome
-
         prime = multiverse_service.initialize_prime_material()
 
         fork = multiverse_service.fork_universe(
