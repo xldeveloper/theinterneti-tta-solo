@@ -436,11 +436,9 @@ NEO4J_SCHEMA = [
     "CREATE INDEX entity_name_index IF NOT EXISTS FOR (e:Entity) ON (e.name)",
     "CREATE INDEX entity_universe_index IF NOT EXISTS FOR (e:Entity) ON (e.universe_id)",
     "CREATE INDEX entity_type_index IF NOT EXISTS FOR (e:Entity) ON (e.type)",
-
     # Relationship indexes
     "CREATE INDEX rel_universe_index IF NOT EXISTS FOR ()-[r:RELATES]-() ON (r.universe_id)",
     "CREATE INDEX rel_type_index IF NOT EXISTS FOR ()-[r:RELATES]-() ON (r.type)",
-
     # Vector index for similarity search (requires Neo4j 5.x with GDS)
     # Note: This requires the Graph Data Science library
     # "CALL db.index.vector.createNodeIndex('entityEmbeddings', 'Entity', 'embedding', 1536, 'cosine')",

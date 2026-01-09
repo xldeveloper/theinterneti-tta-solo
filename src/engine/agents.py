@@ -262,9 +262,7 @@ class LorekeeperAgent:
             relationship_type="CONNECTED_TO",
         )
         for rel in connected_rels:
-            connected_location = self.dolt.get_entity(
-                rel.to_entity_id, session.universe_id
-            )
+            connected_location = self.dolt.get_entity(rel.to_entity_id, session.universe_id)
             if connected_location:
                 exit_name = rel.description if rel.description else connected_location.name
                 exits.append(exit_name)
@@ -292,9 +290,7 @@ class LorekeeperAgent:
                 relationship_type=rel_type.value,
             )
             for rel in rels:
-                related_entity = self.dolt.get_entity(
-                    rel.to_entity_id, session.universe_id
-                )
+                related_entity = self.dolt.get_entity(rel.to_entity_id, session.universe_id)
                 if related_entity:
                     known_entities.append(
                         RelationshipSummary(

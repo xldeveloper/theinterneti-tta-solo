@@ -190,7 +190,9 @@ class SkillRouter:
             if gm_move.damage:
                 existing_damage = result.damage or 0
                 updates["damage"] = existing_damage + gm_move.damage
-                updates["description"] = f"{result.description} {gm_move.description} ({gm_move.damage} damage)"
+                updates["description"] = (
+                    f"{result.description} {gm_move.description} ({gm_move.damage} damage)"
+                )
             else:
                 updates["description"] = f"{result.description} {gm_move.description}"
 
@@ -249,7 +251,9 @@ class SkillRouter:
 
         return SkillResult(
             success=result.hit,
-            outcome="critical_success" if result.critical else ("success" if result.hit else "failure"),
+            outcome="critical_success"
+            if result.critical
+            else ("success" if result.hit else "failure"),
             roll=result.attack_roll,
             total=result.total_attack,
             dc=combat_ctx.target.ac,
@@ -314,10 +318,12 @@ class SkillRouter:
 
         return SkillResult(
             success=result.success,
-            outcome="critical_success" if is_critical and result.success else (
-                "critical_failure" if is_fumble and not result.success else (
-                    "success" if result.success else "failure"
-                )
+            outcome="critical_success"
+            if is_critical and result.success
+            else (
+                "critical_failure"
+                if is_fumble and not result.success
+                else ("success" if result.success else "failure")
             ),
             roll=result.roll,
             total=result.total,

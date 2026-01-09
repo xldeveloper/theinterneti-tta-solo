@@ -109,18 +109,10 @@ class SkillResult(BaseModel):
     pbta_outcome: str | None = Field(
         default=None, description="PbtA outcome: strong_hit, weak_hit, miss"
     )
-    gm_move_type: str | None = Field(
-        default=None, description="GM move type on miss"
-    )
-    gm_move_description: str | None = Field(
-        default=None, description="Description of GM move"
-    )
-    weak_hit_complication: str | None = Field(
-        default=None, description="Complication on weak hit"
-    )
-    strong_hit_bonus: str | None = Field(
-        default=None, description="Bonus effect on strong hit"
-    )
+    gm_move_type: str | None = Field(default=None, description="GM move type on miss")
+    gm_move_description: str | None = Field(default=None, description="Description of GM move")
+    weak_hit_complication: str | None = Field(default=None, description="Complication on weak hit")
+    strong_hit_bonus: str | None = Field(default=None, description="Bonus effect on strong hit")
 
     def to_roll_summary(self, label: str = "Roll") -> RollSummary:
         """Convert to a RollSummary for display."""
@@ -175,9 +167,7 @@ class Context(BaseModel):
     )
 
     # Recent history
-    recent_events: list[str] = Field(
-        default_factory=list, description="Recent event summaries"
-    )
+    recent_events: list[str] = Field(default_factory=list, description="Recent event summaries")
 
     # Atmosphere
     mood: str | None = None
@@ -368,7 +358,5 @@ class EngineForkResult(BaseModel):
         default=None, description="ID of the new session in forked universe"
     )
     fork_reason: str = Field(default="", description="Why this fork was created")
-    narrative: str = Field(
-        default="", description="Narrative description of the fork"
-    )
+    narrative: str = Field(default="", description="Narrative description of the fork")
     error: str | None = Field(default=None, description="Error message if failed")

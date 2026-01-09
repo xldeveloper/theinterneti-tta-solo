@@ -64,7 +64,9 @@ INTENT_PATTERNS: dict[IntentType, list[re.Pattern]] = {
     ],
     IntentType.PICK_UP: [
         re.compile(r"\b(pick up|grab|collect|get)\b", re.I),
-        re.compile(r"\btake\s+(?:the\s+)?(?!a\s+(?:short|long)\s+rest)", re.I),  # "take X" but not "take a rest"
+        re.compile(
+            r"\btake\s+(?:the\s+)?(?!a\s+(?:short|long)\s+rest)", re.I
+        ),  # "take X" but not "take a rest"
     ],
     IntentType.DROP: [
         re.compile(r"\b(drop|put down|discard|throw away)\b", re.I),
@@ -79,7 +81,9 @@ INTENT_PATTERNS: dict[IntentType, list[re.Pattern]] = {
         re.compile(r"\b(wait|stay|remain|do nothing)\b", re.I),
     ],
     IntentType.ASK_QUESTION: [
-        re.compile(r"^(what|where|who|why|how|when)\s+(is|are|was|were|do|does|did|can|could)\b", re.I),
+        re.compile(
+            r"^(what|where|who|why|how|when)\s+(is|are|was|were|do|does|did|can|could)\b", re.I
+        ),
     ],
     IntentType.FORK: [
         re.compile(r"\bwhat if\b", re.I),

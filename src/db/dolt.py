@@ -212,9 +212,13 @@ class DoltRepository:
             dolt_branch=row["dolt_branch"],
             status=UniverseStatus(row["status"]),
             depth=row["depth"],
-            parent_universe_id=UUID(row["parent_universe_id"]) if row["parent_universe_id"] else None,
+            parent_universe_id=UUID(row["parent_universe_id"])
+            if row["parent_universe_id"]
+            else None,
             owner_id=UUID(row["owner_id"]) if row["owner_id"] else None,
-            fork_point_event_id=UUID(row["fork_point_event_id"]) if row["fork_point_event_id"] else None,
+            fork_point_event_id=UUID(row["fork_point_event_id"])
+            if row["fork_point_event_id"]
+            else None,
             is_shared=row.get("is_shared", False),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -256,7 +260,9 @@ class DoltRepository:
                 json.dumps(entity.tags),
                 entity.stats.model_dump_json() if entity.stats else None,
                 entity.faction_properties.model_dump_json() if entity.faction_properties else None,
-                entity.location_properties.model_dump_json() if entity.location_properties else None,
+                entity.location_properties.model_dump_json()
+                if entity.location_properties
+                else None,
                 entity.item_properties.model_dump_json() if entity.item_properties else None,
                 str(entity.current_location_id) if entity.current_location_id else None,
                 entity.created_at,
@@ -442,7 +448,9 @@ class DoltRepository:
             roll=row["roll"],
             payload=json.loads(row["payload"]) if row["payload"] else {},
             narrative_summary=row["narrative_summary"] or "",
-            caused_by_event_id=UUID(row["caused_by_event_id"]) if row["caused_by_event_id"] else None,
+            caused_by_event_id=UUID(row["caused_by_event_id"])
+            if row["caused_by_event_id"]
+            else None,
         )
 
 
