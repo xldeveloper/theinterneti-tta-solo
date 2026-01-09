@@ -382,7 +382,11 @@ class MultiverseService:
     # Phase 5: Merge/PR System for Canon
     # =========================================================================
 
-    # In-memory storage for proposals (would be persisted in production)
+    # Instance-level storage for merge proposals.
+    # In a production deployment, this would be persisted to the database.
+    # Each MultiverseService instance maintains its own proposal registry,
+    # keyed by proposal UUID for O(1) lookup.
+    # Note: Not thread-safe - synchronization needed for concurrent access.
     _proposals: dict[UUID, MergeProposal] = field(default_factory=dict)
 
     def propose_merge(
@@ -439,9 +443,10 @@ class MultiverseService:
 
         Checks:
         1. Source and target universes exist
-        2. Entities exist in source universe
-        3. No name conflicts in target universe
-        4. Target is an ancestor of source (can merge up the tree)
+        2. Target is an ancestor of source (can only merge up the tree)
+        3. Target universe is active
+        4. Entities exist in source universe
+        5. No name conflicts in target universe
 
         Args:
             proposal: The merge proposal to validate
@@ -463,18 +468,35 @@ class MultiverseService:
             conflicts.append(f"Target universe {proposal.target_universe_id} not found")
             return conflicts
 
+        # Check target is an ancestor of source (can only merge "up" the tree)
+        lineage = self.get_universe_lineage(proposal.source_universe_id)
+        lineage_ids = {u.id for u in lineage}
+        if proposal.target_universe_id not in lineage_ids:
+            conflicts.append(
+                "Target universe is not an ancestor of source - can only merge up the fork tree"
+            )
+
         # Check target is active
         if not target.is_active():
             conflicts.append(f"Target universe is not active (status: {target.status})")
 
-        # Verify entities exist in source
-        self.dolt.checkout_branch(source.dolt_branch)
-        for entity_id in proposal.entity_ids:
-            entity = self.dolt.get_entity(entity_id, proposal.source_universe_id)
-            if entity is None:
-                conflicts.append(f"Entity {entity_id} not found in source universe")
-            else:
-                # Check for name conflicts in target
+        # Track original branch to restore later
+        original_branch = getattr(self.dolt, "_current_branch", "main")
+
+        try:
+            # Verify entities exist in source and check for name conflicts
+            self.dolt.checkout_branch(source.dolt_branch)
+            entity_names_to_merge: list[str] = []
+
+            for entity_id in proposal.entity_ids:
+                entity = self.dolt.get_entity(entity_id, proposal.source_universe_id)
+                if entity is None:
+                    conflicts.append(f"Entity {entity_id} not found in source universe")
+                else:
+                    entity_names_to_merge.append(entity.name)
+
+            # Check for name conflicts in target (using name-based comparison)
+            if entity_names_to_merge:
                 self.dolt.checkout_branch(target.dolt_branch)
                 # In a real implementation, we'd check if an entity with the
                 # same name already exists in the target
@@ -482,6 +504,17 @@ class MultiverseService:
                 if existing is not None:
                     conflicts.append(f"Entity '{entity.name}' already exists in target universe")
                 self.dolt.checkout_branch(source.dolt_branch)
+                for name in entity_names_to_merge:
+                    existing = self.dolt.get_entity_by_name(
+                        name, proposal.target_universe_id
+                    )
+                    if existing is not None:
+                        conflicts.append(
+                            f"Entity with name '{name}' already exists in target universe"
+                        )
+        finally:
+            # Restore original branch
+            self.dolt.checkout_branch(original_branch)
 
         return conflicts
 
@@ -561,6 +594,9 @@ class MultiverseService:
                 error="Source or target universe not found",
             )
 
+        # Track original branch to restore later
+        original_branch = getattr(self.dolt, "_current_branch", "main")
+
         entities_merged = 0
         entities_skipped = 0
         merged_names: list[str] = []
@@ -592,25 +628,65 @@ class MultiverseService:
                 variant_universe_id=proposal.target_universe_id,
                 changes={"merged_from": str(proposal.source_universe_id)},
             )
+        try:
+            # Copy each entity to the target
+            for entity_id in proposal.entity_ids:
+                self.dolt.checkout_branch(source.dolt_branch)
+                entity = self.dolt.get_entity(entity_id, proposal.source_universe_id)
 
-            entities_merged += 1
-            merged_names.append(entity.name)
+                if entity is None:
+                    entities_skipped += 1
+                    continue
 
-        # Record the merge event
-        merge_event = Event(
-            universe_id=proposal.target_universe_id,
-            event_type=EventType.MERGE,
-            actor_id=proposal.submitter_id or uuid4(),
-            outcome=EventOutcome.SUCCESS,
-            payload={
-                "proposal_id": str(proposal_id),
-                "source_universe_id": str(proposal.source_universe_id),
-                "entities_merged": entities_merged,
-                "entity_names": merged_names,
-            },
-            narrative_summary=f"Content merged from alternate timeline: {', '.join(merged_names)}",
-        )
-        self.dolt.append_event(merge_event)
+                # Create a copy for the target universe
+                merged_entity = entity.model_copy(deep=True)
+                merged_entity.id = uuid4()  # New ID in target
+                merged_entity.universe_id = proposal.target_universe_id
+                merged_entity.created_at = datetime.now(UTC)
+                merged_entity.updated_at = datetime.now(UTC)
+
+                # Save to target
+                self.dolt.checkout_branch(target.dolt_branch)
+                self.dolt.save_entity(merged_entity)
+
+                # Create Neo4j variant relationship (tracks origin)
+                self.neo4j.create_variant_node(
+                    original_entity_id=entity_id,
+                    variant_entity_id=merged_entity.id,
+                    variant_universe_id=proposal.target_universe_id,
+                    changes={"merged_from": str(proposal.source_universe_id)},
+                )
+
+                entities_merged += 1
+                merged_names.append(entity.name)
+
+            # Determine outcome based on merge results
+            if entities_merged == 0:
+                outcome = EventOutcome.FAILURE
+            elif entities_skipped > 0:
+                outcome = EventOutcome.PARTIAL
+            else:
+                outcome = EventOutcome.SUCCESS
+
+            # Record the merge event
+            merge_event = Event(
+                universe_id=proposal.target_universe_id,
+                event_type=EventType.MERGE,
+                actor_id=proposal.submitter_id or uuid4(),
+                outcome=outcome,
+                payload={
+                    "proposal_id": str(proposal_id),
+                    "source_universe_id": str(proposal.source_universe_id),
+                    "entities_merged": entities_merged,
+                    "entities_skipped": entities_skipped,
+                    "entity_names": merged_names,
+                },
+                narrative_summary=f"Content merged from alternate timeline: {', '.join(merged_names)}" if merged_names else "Merge attempted but no entities were copied",
+            )
+            self.dolt.append_event(merge_event)
+        finally:
+            # Restore original branch
+            self.dolt.checkout_branch(original_branch)
 
         # Update proposal status
         proposal.status = MergeProposalStatus.MERGED
