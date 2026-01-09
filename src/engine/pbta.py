@@ -184,11 +184,13 @@ def select_gm_move(
     if make_hard_move:
         if is_combat:
             # Combat favors damage or monster moves
-            move_type = random.choice([
-                GMMoveType.DEAL_DAMAGE,
-                GMMoveType.USE_MONSTER_MOVE,
-                GMMoveType.TAKE_AWAY,
-            ])
+            move_type = random.choice(
+                [
+                    GMMoveType.DEAL_DAMAGE,
+                    GMMoveType.USE_MONSTER_MOVE,
+                    GMMoveType.TAKE_AWAY,
+                ]
+            )
         else:
             move_type = random.choice(list(HARD_MOVES))
     else:
@@ -200,7 +202,9 @@ def select_gm_move(
         type=move_type,
         is_hard=move_type in HARD_MOVES,
         description=_get_move_description(move_type),
-        damage=_get_move_damage(move_type, danger_level) if move_type == GMMoveType.DEAL_DAMAGE else None,
+        damage=_get_move_damage(move_type, danger_level)
+        if move_type == GMMoveType.DEAL_DAMAGE
+        else None,
     )
 
 

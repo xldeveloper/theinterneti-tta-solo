@@ -499,9 +499,7 @@ class MultiverseService:
             if entity_names_to_merge:
                 self.dolt.checkout_branch(target.dolt_branch)
                 for name in entity_names_to_merge:
-                    existing = self.dolt.get_entity_by_name(
-                        name, proposal.target_universe_id
-                    )
+                    existing = self.dolt.get_entity_by_name(name, proposal.target_universe_id)
                     if existing is not None:
                         conflicts.append(
                             f"Entity with name '{name}' already exists in target universe"
@@ -648,7 +646,9 @@ class MultiverseService:
                     "entities_skipped": entities_skipped,
                     "entity_names": merged_names,
                 },
-                narrative_summary=f"Content merged from alternate timeline: {', '.join(merged_names)}" if merged_names else "Merge attempted but no entities were copied",
+                narrative_summary=f"Content merged from alternate timeline: {', '.join(merged_names)}"
+                if merged_names
+                else "Merge attempted but no entities were copied",
             )
             self.dolt.append_event(merge_event)
         finally:
@@ -680,10 +680,7 @@ class MultiverseService:
         Returns:
             List of pending MergeProposal objects
         """
-        pending = [
-            p for p in self._proposals.values()
-            if p.status == MergeProposalStatus.PENDING
-        ]
+        pending = [p for p in self._proposals.values() if p.status == MergeProposalStatus.PENDING]
 
         if target_universe_id is not None:
             pending = [p for p in pending if p.target_universe_id == target_universe_id]

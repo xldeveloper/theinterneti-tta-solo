@@ -52,14 +52,12 @@ _RulesLawyerAgent: type[RulesLawyerAgentType] | None = None
 _LorekeeperAgent: type[LorekeeperAgentType] | None = None
 
 
-def _import_agents() -> (
-    tuple[
-        type[AgentOrchestratorType],
-        type[GMAgentType],
-        type[RulesLawyerAgentType],
-        type[LorekeeperAgentType],
-    ]
-):
+def _import_agents() -> tuple[
+    type[AgentOrchestratorType],
+    type[GMAgentType],
+    type[RulesLawyerAgentType],
+    type[LorekeeperAgentType],
+]:
     """Lazy import of agents to avoid circular imports."""
     global _AgentOrchestrator, _GMAgent, _RulesLawyerAgent, _LorekeeperAgent
     if _AgentOrchestrator is None:
@@ -611,9 +609,7 @@ class GameEngine:
         )
         for rel in connected_rels:
             # Get the connected location
-            connected_location = self.dolt.get_entity(
-                rel.to_entity_id, session.universe_id
-            )
+            connected_location = self.dolt.get_entity(rel.to_entity_id, session.universe_id)
             if connected_location:
                 # Use description as exit name if available, otherwise use location name
                 exit_name = rel.description if rel.description else connected_location.name
@@ -643,9 +639,7 @@ class GameEngine:
             )
             for rel in rels:
                 # Get the related entity
-                related_entity = self.dolt.get_entity(
-                    rel.to_entity_id, session.universe_id
-                )
+                related_entity = self.dolt.get_entity(rel.to_entity_id, session.universe_id)
                 if related_entity:
                     known_entities.append(
                         RelationshipSummary(

@@ -727,9 +727,7 @@ class TestContextRetrieval:
         location = create_location(universe_id=universe.id, name="Empty Room")
         dolt.save_entity(location)
 
-        character = create_character(
-            universe_id=universe.id, name="Loner", location_id=location.id
-        )
+        character = create_character(universe_id=universe.id, name="Loner", location_id=location.id)
         dolt.save_entity(character)
 
         engine = GameEngine(dolt=dolt, neo4j=neo4j)
@@ -876,9 +874,7 @@ class TestRulesLawyerAgent:
         context = Context(
             actor=EntitySummary(id=uuid4(), name="Hero", type="character", ac=15),
             location=EntitySummary(id=uuid4(), name="Cave", type="location"),
-            entities_present=[
-                EntitySummary(id=uuid4(), name="Goblin", type="character", ac=13)
-            ],
+            entities_present=[EntitySummary(id=uuid4(), name="Goblin", type="character", ac=13)],
         )
 
         msg = AgentMessage(
@@ -1037,9 +1033,9 @@ class TestAgentOrchestrator:
             location_id=world["location"].id,
         )
 
-        intent, context, skill_results, narrative = await world[
-            "orchestrator"
-        ].process_turn("I look around", session)
+        intent, context, skill_results, narrative = await world["orchestrator"].process_turn(
+            "I look around", session
+        )
 
         assert intent.type == IntentType.LOOK
         assert context.location.name == "Town Square"
@@ -1054,9 +1050,9 @@ class TestAgentOrchestrator:
             location_id=world["location"].id,
         )
 
-        intent, context, skill_results, narrative = await world[
-            "orchestrator"
-        ].process_turn("I attack the enemy", session)
+        intent, context, skill_results, narrative = await world["orchestrator"].process_turn(
+            "I attack the enemy", session
+        )
 
         assert intent.type == IntentType.ATTACK
         assert len(skill_results) > 0
