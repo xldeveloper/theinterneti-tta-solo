@@ -664,6 +664,36 @@ class MultiverseService:
                     entities_skipped += 1
                     continue
 
+        # Determine outcome based on merge results
+        if entities_merged == 0:
+            outcome = EventOutcome.FAILURE
+            narrative_summary = "Merge failed: no entities were successfully merged"
+        elif entities_merged > 0 and entities_skipped > 0:
+            outcome = EventOutcome.PARTIAL
+            narrative_summary = (
+                f"Partial merge: {entities_merged} entities merged, "
+                f"{entities_skipped} skipped. Merged: {', '.join(merged_names)}"
+            )
+        else:
+            outcome = EventOutcome.SUCCESS
+            narrative_summary = f"Content merged from alternate timeline: {', '.join(merged_names)}"
+
+        # Record the merge event
+        merge_event = Event(
+            universe_id=proposal.target_universe_id,
+            event_type=EventType.MERGE,
+            actor_id=proposal.submitter_id or uuid4(),
+            outcome=outcome,
+            payload={
+                "proposal_id": str(proposal_id),
+                "source_universe_id": str(proposal.source_universe_id),
+                "entities_merged": entities_merged,
+                "entities_skipped": entities_skipped,
+                "entity_names": merged_names,
+            },
+            narrative_summary=narrative_summary,
+        )
+        self.dolt.append_event(merge_event)
                 # Create a copy for the target universe
                 merged_entity = entity.model_copy(deep=True)
                 merged_entity.id = uuid4()  # New ID in target
