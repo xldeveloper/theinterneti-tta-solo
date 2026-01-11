@@ -1,23 +1,21 @@
--- TTA-Solo Dolt Database Initialization
---
--- This script creates the core schema for the TTA-Solo game engine.
--- Run automatically when the Dolt container starts.
---
--- SECURITY NOTE: Change default passwords in production!
--- See .env.example for configuration.
+#!/bin/bash
+# TTA-Solo Dolt Database Initialization
+# This script wraps the SQL initialization for Docker entrypoint compatibility.
 
--- Create a user for external connections (Python app)
--- Note: Password matches DOLT_ROOT_PASSWORD from docker-compose.yml
-CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY 'doltpass';
-GRANT ALL PRIVILEGES ON *.* TO 'root'@'%';
-FLUSH PRIVILEGES;
+set -e
 
--- Create the database if it doesn't exist
-CREATE DATABASE IF NOT EXISTS tta_solo;
-USE tta_solo;
+echo "Initializing TTA-Solo database..."
 
--- Universes table (timeline branches)
-CREATE TABLE IF NOT EXISTS universes (
+# Create user for external connections
+dolt sql -q "CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY 'doltpass'"
+dolt sql -q "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%'"
+dolt sql -q "FLUSH PRIVILEGES"
+
+# Create database
+dolt sql -q "CREATE DATABASE IF NOT EXISTS tta_solo"
+
+# Create tables
+dolt sql -q "USE tta_solo; CREATE TABLE IF NOT EXISTS universes (
     id VARCHAR(36) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
@@ -32,10 +30,9 @@ CREATE TABLE IF NOT EXISTS universes (
     updated_at DATETIME NOT NULL,
     INDEX idx_branch (branch_name),
     INDEX idx_parent (parent_universe_id)
-);
+)"
 
--- Entities table (characters, locations, items, etc.)
-CREATE TABLE IF NOT EXISTS entities (
+dolt sql -q "USE tta_solo; CREATE TABLE IF NOT EXISTS entities (
     id VARCHAR(36) PRIMARY KEY,
     universe_id VARCHAR(36) NOT NULL,
     type VARCHAR(50) NOT NULL,
@@ -53,10 +50,9 @@ CREATE TABLE IF NOT EXISTS entities (
     INDEX idx_type (type),
     INDEX idx_name (name),
     UNIQUE KEY uk_name_universe (name, universe_id)
-);
+)"
 
--- Events table (append-only log - the game history)
-CREATE TABLE IF NOT EXISTS events (
+dolt sql -q "USE tta_solo; CREATE TABLE IF NOT EXISTS events (
     id VARCHAR(36) PRIMARY KEY,
     universe_id VARCHAR(36) NOT NULL,
     event_type VARCHAR(50) NOT NULL,
@@ -73,10 +69,9 @@ CREATE TABLE IF NOT EXISTS events (
     INDEX idx_universe_time (universe_id, timestamp),
     INDEX idx_location (location_id),
     INDEX idx_actor (actor_id)
-);
+)"
 
--- NPC profiles (extends entities with personality data)
-CREATE TABLE IF NOT EXISTS npc_profiles (
+dolt sql -q "USE tta_solo; CREATE TABLE IF NOT EXISTS npc_profiles (
     entity_id VARCHAR(36) PRIMARY KEY,
     traits JSON NOT NULL,
     motivations JSON NOT NULL,
@@ -87,10 +82,9 @@ CREATE TABLE IF NOT EXISTS npc_profiles (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (entity_id) REFERENCES entities(id)
-);
+)"
 
--- NPC memories (for persistence, Neo4j handles search)
-CREATE TABLE IF NOT EXISTS npc_memories (
+dolt sql -q "USE tta_solo; CREATE TABLE IF NOT EXISTS npc_memories (
     id VARCHAR(36) PRIMARY KEY,
     npc_id VARCHAR(36) NOT NULL,
     memory_type VARCHAR(50) NOT NULL,
@@ -106,23 +100,15 @@ CREATE TABLE IF NOT EXISTS npc_memories (
     INDEX idx_subject (subject_id),
     INDEX idx_event (event_id),
     FOREIGN KEY (npc_id) REFERENCES entities(id)
-);
+)"
 
--- Commit the initial schema
-CALL DOLT_ADD('.');
-CALL DOLT_COMMIT('-m', 'Initialize TTA-Solo schema');
+# Commit initial schema
+dolt sql -q "USE tta_solo; CALL DOLT_ADD('.')"
+dolt sql -q "USE tta_solo; CALL DOLT_COMMIT('-m', 'Initialize TTA-Solo schema')"
 
--- Create the Prime universe (default timeline)
-INSERT INTO universes (
-    id,
-    name,
-    description,
-    branch_name,
-    status,
-    depth,
-    is_shared,
-    created_at,
-    updated_at
+# Create Prime universe
+dolt sql -q "USE tta_solo; INSERT INTO universes (
+    id, name, description, branch_name, status, depth, is_shared, created_at, updated_at
 ) VALUES (
     '00000000-0000-0000-0000-000000000001',
     'Prime',
@@ -133,7 +119,9 @@ INSERT INTO universes (
     TRUE,
     NOW(),
     NOW()
-);
+)"
 
-CALL DOLT_ADD('.');
-CALL DOLT_COMMIT('-m', 'Create Prime universe');
+dolt sql -q "USE tta_solo; CALL DOLT_ADD('.')"
+dolt sql -q "USE tta_solo; CALL DOLT_COMMIT('-m', 'Create Prime universe')"
+
+echo "TTA-Solo database initialized successfully!"

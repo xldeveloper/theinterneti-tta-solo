@@ -181,22 +181,22 @@ class MultiverseService:
         )
 
         # Create Dolt branch
-        if not self.dolt.branch_exists(parent.dolt_branch):
+        if not self.dolt.branch_exists(parent.branch_name):
             return ForkResult(
                 success=False,
-                error=f"Parent Dolt branch '{parent.dolt_branch}' does not exist",
+                error=f"Parent Dolt branch '{parent.branch_name}' does not exist",
             )
 
         try:
             self.dolt.create_branch(
-                branch_name=new_universe.dolt_branch,
-                from_branch=parent.dolt_branch,
+                branch_name=new_universe.branch_name,
+                from_branch=parent.branch_name,
             )
         except ValueError as e:
             return ForkResult(success=False, error=str(e))
 
         # Switch to the new branch and save the universe
-        self.dolt.checkout_branch(new_universe.dolt_branch)
+        self.dolt.checkout_branch(new_universe.branch_name)
         self.dolt.save_universe(new_universe)
 
         # Create and record the fork event
@@ -255,7 +255,7 @@ class MultiverseService:
             )
 
         # Get the traveler from source universe
-        self.dolt.checkout_branch(source.dolt_branch)
+        self.dolt.checkout_branch(source.branch_name)
         traveler = self.dolt.get_entity(traveler_id, source_universe_id)
         if traveler is None:
             return TravelResult(
@@ -278,7 +278,7 @@ class MultiverseService:
         traveler_copy.updated_at = datetime.now(UTC)
 
         # Save the copy in the destination
-        self.dolt.checkout_branch(destination.dolt_branch)
+        self.dolt.checkout_branch(destination.branch_name)
         self.dolt.save_entity(traveler_copy)
 
         # Create Neo4j variant relationship
@@ -334,7 +334,7 @@ class MultiverseService:
         universe.status = UniverseStatus.ARCHIVED
         universe.updated_at = datetime.now(UTC)
 
-        self.dolt.checkout_branch(universe.dolt_branch)
+        self.dolt.checkout_branch(universe.branch_name)
         self.dolt.save_universe(universe)
         return True
 
@@ -485,7 +485,7 @@ class MultiverseService:
 
         try:
             # Verify entities exist in source and check for name conflicts
-            self.dolt.checkout_branch(source.dolt_branch)
+            self.dolt.checkout_branch(source.branch_name)
             entity_names_to_merge: list[str] = []
 
             for entity_id in proposal.entity_ids:
@@ -497,7 +497,7 @@ class MultiverseService:
 
             # Check for name conflicts in target (using name-based comparison)
             if entity_names_to_merge:
-                self.dolt.checkout_branch(target.dolt_branch)
+                self.dolt.checkout_branch(target.branch_name)
                 for name in entity_names_to_merge:
                     existing = self.dolt.get_entity_by_name(name, proposal.target_universe_id)
                     if existing is not None:
@@ -596,7 +596,7 @@ class MultiverseService:
         try:
             # Copy each entity to the target
             for entity_id in proposal.entity_ids:
-                self.dolt.checkout_branch(source.dolt_branch)
+                self.dolt.checkout_branch(source.branch_name)
                 entity = self.dolt.get_entity(entity_id, proposal.source_universe_id)
 
                 if entity is None:
@@ -611,7 +611,7 @@ class MultiverseService:
                 merged_entity.updated_at = datetime.now(UTC)
 
                 # Save to target
-                self.dolt.checkout_branch(target.dolt_branch)
+                self.dolt.checkout_branch(target.branch_name)
                 self.dolt.save_entity(merged_entity)
 
                 # Create Neo4j variant relationship (tracks origin)

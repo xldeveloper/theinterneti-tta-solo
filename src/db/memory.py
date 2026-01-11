@@ -88,7 +88,7 @@ class InMemoryDoltRepository:
         """Get a universe by its Dolt branch name."""
         branch_data = self._universes.get(self._current_branch, {})
         for universe in branch_data.values():
-            if universe.dolt_branch == branch_name:
+            if universe.branch_name == branch_name:
                 return deepcopy(universe)
         return None
 

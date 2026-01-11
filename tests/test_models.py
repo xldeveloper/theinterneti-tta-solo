@@ -252,7 +252,7 @@ class TestUniverse:
         assert prime.is_prime_material() is True
         assert prime.parent_universe_id is None
         assert prime.depth == 0
-        assert prime.dolt_branch == "main"
+        assert prime.branch_name == "main"
         assert prime.is_shared is True
 
     def test_create_fork(self):
@@ -270,7 +270,7 @@ class TestUniverse:
         assert forked.depth == 1
         assert forked.owner_id == player_id
         assert forked.is_shared is False
-        assert "user/" in forked.dolt_branch
+        assert "user/" in forked.branch_name
 
     def test_nested_forks_increment_depth(self):
         prime = create_prime_material()

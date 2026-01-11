@@ -354,7 +354,7 @@ class GameREPL:
         universe = Universe(
             name="Prime",
             description="The original timeline",
-            dolt_branch="main",
+            branch_name="main",
         )
         state.engine.dolt.save_universe(universe)
         state.universe_id = universe.id

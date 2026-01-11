@@ -115,7 +115,7 @@ class DoltRepository:
             self._execute_proc("dolt_checkout", (from_branch,))
 
         # Create the new branch
-        self._execute_proc("dolt_branch", (branch_name,))
+        self._execute_proc("branch_name", (branch_name,))
 
         # Return to original branch if needed
         if current != from_branch:
@@ -128,7 +128,7 @@ class DoltRepository:
     def branch_exists(self, branch_name: str) -> bool:
         """Check if a branch exists."""
         result = self._execute(
-            "SELECT name FROM dolt_branches WHERE name = %s",
+            "SELECT name FROM branch_namees WHERE name = %s",
             (branch_name,),
         )
         return len(result) > 0
@@ -140,7 +140,7 @@ class DoltRepository:
         if branch_name == self.get_current_branch():
             raise ValueError("Cannot delete the current branch")
 
-        self._execute_proc("dolt_branch", ("-D", branch_name))
+        self._execute_proc("branch_name", ("-D", branch_name))
 
     # =========================================================================
     # Universe Operations
@@ -150,7 +150,7 @@ class DoltRepository:
         """Insert or update a universe record."""
         query = """
             INSERT INTO universes (
-                id, name, description, dolt_branch, status, depth,
+                id, name, description, branch_name, status, depth,
                 parent_universe_id, owner_id, fork_point_event_id,
                 is_shared, created_at, updated_at
             ) VALUES (
@@ -168,7 +168,7 @@ class DoltRepository:
                 str(universe.id),
                 universe.name,
                 universe.description,
-                universe.dolt_branch,
+                universe.branch_name,
                 universe.status.value,
                 universe.depth,
                 str(universe.parent_universe_id) if universe.parent_universe_id else None,
@@ -196,7 +196,7 @@ class DoltRepository:
     def get_universe_by_branch(self, branch_name: str) -> Universe | None:
         """Get a universe by its Dolt branch name."""
         result = self._execute(
-            "SELECT * FROM universes WHERE dolt_branch = %s",
+            "SELECT * FROM universes WHERE branch_name = %s",
             (branch_name,),
         )
         if not result:
@@ -209,7 +209,7 @@ class DoltRepository:
             id=UUID(row["id"]),
             name=row["name"],
             description=row["description"] or "",
-            dolt_branch=row["dolt_branch"],
+            branch_name=row["branch_name"],
             status=UniverseStatus(row["status"]),
             depth=row["depth"],
             parent_universe_id=UUID(row["parent_universe_id"])
@@ -461,7 +461,7 @@ CREATE TABLE IF NOT EXISTS universes (
     id VARCHAR(36) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    dolt_branch VARCHAR(255) NOT NULL UNIQUE,
+    branch_name VARCHAR(255) NOT NULL UNIQUE,
     status VARCHAR(50) NOT NULL DEFAULT 'active',
     depth INT NOT NULL DEFAULT 0,
     parent_universe_id VARCHAR(36),
@@ -470,7 +470,7 @@ CREATE TABLE IF NOT EXISTS universes (
     is_shared BOOLEAN NOT NULL DEFAULT FALSE,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
-    INDEX idx_dolt_branch (dolt_branch),
+    INDEX idx_branch_name (branch_name),
     INDEX idx_parent (parent_universe_id)
 );
 

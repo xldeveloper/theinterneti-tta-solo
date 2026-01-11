@@ -35,7 +35,7 @@ class TestInitializePrimeMaterial:
 
         assert prime.name == "Prime Material"
         assert prime.is_prime_material()
-        assert prime.dolt_branch == "main"
+        assert prime.branch_name == "main"
 
     def test_custom_name(self, multiverse_service: MultiverseService):
         prime = multiverse_service.initialize_prime_material(name="Custom Prime")
@@ -67,7 +67,7 @@ class TestForkUniverse:
         assert result.universe.parent_universe_id == prime.id
         assert result.universe.depth == 1
 
-    def test_fork_creates_dolt_branch(self, multiverse_service: MultiverseService):
+    def test_fork_creates_branch_name(self, multiverse_service: MultiverseService):
         prime = multiverse_service.initialize_prime_material()
 
         result = multiverse_service.fork_universe(
@@ -77,7 +77,7 @@ class TestForkUniverse:
         )
 
         assert result.success
-        assert multiverse_service.dolt.branch_exists(result.universe.dolt_branch)
+        assert multiverse_service.dolt.branch_exists(result.universe.branch_name)
 
     def test_fork_records_event(self, multiverse_service: MultiverseService):
         prime = multiverse_service.initialize_prime_material()
@@ -105,7 +105,7 @@ class TestForkUniverse:
 
         assert result.success
         assert result.universe.owner_id == player_id
-        assert f"user/{player_id}" in result.universe.dolt_branch
+        assert f"user/{player_id}" in result.universe.branch_name
 
     def test_fork_nonexistent_parent_fails(self, multiverse_service: MultiverseService):
         result = multiverse_service.fork_universe(
@@ -314,7 +314,7 @@ class TestArchiveUniverse:
         assert success
 
         # Check status was updated
-        multiverse_service.dolt.checkout_branch(fork_result.universe.dolt_branch)
+        multiverse_service.dolt.checkout_branch(fork_result.universe.branch_name)
         archived = multiverse_service.dolt.get_universe(fork_result.universe.id)
         assert archived.status == UniverseStatus.ARCHIVED
 
@@ -397,7 +397,7 @@ class TestMergeProposals:
 
         # Create an NPC in the fork
         npc = create_character(universe_id=fork.universe.id, name="Cool NPC")
-        multiverse_service.dolt.checkout_branch(fork.universe.dolt_branch)
+        multiverse_service.dolt.checkout_branch(fork.universe.branch_name)
         multiverse_service.dolt.save_entity(npc)
 
         # Propose merging the NPC to prime
@@ -468,7 +468,7 @@ class TestMergeProposals:
         multiverse_service.dolt.save_universe(fork.universe)
 
         location = create_location(universe_id=fork.universe.id, name="New Tavern")
-        multiverse_service.dolt.checkout_branch(fork.universe.dolt_branch)
+        multiverse_service.dolt.checkout_branch(fork.universe.branch_name)
         multiverse_service.dolt.save_entity(location)
 
         proposal = multiverse_service.propose_merge(
@@ -506,7 +506,7 @@ class TestMergeProposals:
         multiverse_service.dolt.save_universe(fork.universe)
 
         npc = create_character(universe_id=fork.universe.id, name="Bad NPC")
-        multiverse_service.dolt.checkout_branch(fork.universe.dolt_branch)
+        multiverse_service.dolt.checkout_branch(fork.universe.branch_name)
         multiverse_service.dolt.save_entity(npc)
 
         proposal = multiverse_service.propose_merge(
@@ -540,7 +540,7 @@ class TestMergeProposals:
 
         # Create content in fork
         npc = create_character(universe_id=fork.universe.id, name="Merged NPC")
-        multiverse_service.dolt.checkout_branch(fork.universe.dolt_branch)
+        multiverse_service.dolt.checkout_branch(fork.universe.branch_name)
         multiverse_service.dolt.save_entity(npc)
 
         # Propose and approve
@@ -583,7 +583,7 @@ class TestMergeProposals:
         multiverse_service.dolt.save_universe(fork.universe)
 
         npc = create_character(universe_id=fork.universe.id, name="Test NPC")
-        multiverse_service.dolt.checkout_branch(fork.universe.dolt_branch)
+        multiverse_service.dolt.checkout_branch(fork.universe.branch_name)
         multiverse_service.dolt.save_entity(npc)
 
         proposal = multiverse_service.propose_merge(
@@ -615,7 +615,7 @@ class TestMergeProposals:
         # Create two proposals
         npc1 = create_character(universe_id=fork.universe.id, name="NPC 1")
         npc2 = create_character(universe_id=fork.universe.id, name="NPC 2")
-        multiverse_service.dolt.checkout_branch(fork.universe.dolt_branch)
+        multiverse_service.dolt.checkout_branch(fork.universe.branch_name)
         multiverse_service.dolt.save_entity(npc1)
         multiverse_service.dolt.save_entity(npc2)
 
@@ -662,7 +662,7 @@ class TestMergeProposals:
             universe_id=fork.universe.id,
             name="The Rusty Dragon Inn",
         )
-        multiverse_service.dolt.checkout_branch(fork.universe.dolt_branch)
+        multiverse_service.dolt.checkout_branch(fork.universe.branch_name)
         multiverse_service.dolt.save_entity(tavern)
 
         # Player submits for canon

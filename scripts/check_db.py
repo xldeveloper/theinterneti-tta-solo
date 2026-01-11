@@ -12,9 +12,16 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 # Add src to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load .env file if it exists
+from dotenv import load_dotenv
+
+env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
 
 
 def check_dolt() -> bool:

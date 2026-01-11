@@ -55,7 +55,7 @@ class Universe(BaseModel):
     last_event_at: datetime | None = Field(default=None)
 
     # Dolt integration
-    dolt_branch: str = Field(default="", description="Corresponding Dolt branch name")
+    branch_name: str = Field(default="", description="Corresponding Dolt branch name")
 
     def is_prime_material(self) -> bool:
         """Check if this is the root/canonical universe."""
@@ -96,7 +96,7 @@ def create_prime_material(name: str = "Prime Material", description: str = "") -
         depth=0,
         is_shared=True,
     )
-    universe.dolt_branch = "main"
+    universe.branch_name = "main"
     return universe
 
 
@@ -132,9 +132,9 @@ def create_fork(
     # Generate Dolt branch name
     safe_name = name.lower().replace(" ", "_").replace("-", "_")
     if owner_id:
-        universe.dolt_branch = f"user/{owner_id}/{safe_name}"
+        universe.branch_name = f"user/{owner_id}/{safe_name}"
     else:
-        universe.dolt_branch = f"fork/{universe.id}"
+        universe.branch_name = f"fork/{universe.id}"
     return universe
 
 
@@ -156,5 +156,5 @@ def create_shared_adventure(
         is_shared=True,
     )
     safe_name = name.lower().replace(" ", "_").replace("-", "_")
-    universe.dolt_branch = f"adventure/{safe_name}"
+    universe.branch_name = f"adventure/{safe_name}"
     return universe

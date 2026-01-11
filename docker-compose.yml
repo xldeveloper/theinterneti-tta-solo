@@ -9,7 +9,7 @@
 #
 # After starting, initialize Neo4j indexes (one-time):
 #   docker exec tta-neo4j cypher-shell -u neo4j -p "${NEO4J_PASSWORD:-neo4jpass}" \
-#     -f /var/lib/neo4j/import/init.cypher
+#     -f /init/init.cypher
 #
 # Ports:
 #   - Dolt SQL:    3306 (MySQL protocol)
@@ -26,9 +26,9 @@ services:
       DOLT_ROOT_PASSWORD: ${DOLT_PASSWORD:-doltpass}
     volumes:
       - dolt-data:/var/lib/dolt
-      - ./scripts/init-dolt.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./scripts/init-dolt.sh:/docker-entrypoint-initdb.d/init.sh:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--password=${DOLT_PASSWORD:-doltpass}"]
+      test: ["CMD", "dolt", "sql", "-q", "SELECT 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -49,7 +49,7 @@ services:
     volumes:
       - neo4j-data:/data
       - neo4j-logs:/logs
-      - ./scripts/init-neo4j.cypher:/var/lib/neo4j/import/init.cypher:ro
+      - ./scripts/init-neo4j.cypher:/init/init.cypher:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:7474"]
       interval: 10s
