@@ -137,8 +137,7 @@ class OpenRouterProvider:
         """
         if self._client is None:
             raise RuntimeError(
-                "OpenRouter provider not configured. "
-                "Set OPENROUTER_API_KEY environment variable."
+                "OpenRouter provider not configured. Set OPENROUTER_API_KEY environment variable."
             )
 
         response = await self._client.chat.completions.create(
@@ -263,7 +262,7 @@ CURRENT STATE:
 - Urgency: {urgency}
 
 RELEVANT MEMORIES:
-{chr(10).join(f'- {m}' for m in memories) if memories else '- None relevant'}
+{chr(10).join(f"- {m}" for m in memories) if memories else "- None relevant"}
 
 {f"CONSTRAINTS:{chr(10)}{chr(10).join(f'- {c}' for c in constraints)}" if constraints else ""}
 
@@ -316,7 +315,7 @@ Keep responses to 2-4 sentences."""
 
 Event: {event_description}
 Location: {location}
-Characters: {', '.join(characters_involved)}
+Characters: {", ".join(characters_involved)}
 
 Narrate:"""
 

@@ -55,19 +55,109 @@ MEMORY_PREFETCH_MULTIPLIER = 3  # Fetch this many times the limit for scoring/fi
 # =============================================================================
 
 # Common stop words to exclude from keyword extraction
-_STOP_WORDS = frozenset({
-    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "must", "shall", "can", "need", "dare",
-    "ought", "used", "to", "of", "in", "for", "on", "with", "at", "by",
-    "from", "as", "into", "through", "during", "before", "after", "above",
-    "below", "between", "under", "again", "further", "then", "once", "here",
-    "there", "when", "where", "why", "how", "all", "each", "few", "more",
-    "most", "other", "some", "such", "no", "nor", "not", "only", "own",
-    "same", "so", "than", "too", "very", "just", "and", "but", "if", "or",
-    "because", "until", "while", "this", "that", "these", "those", "i",
-    "you", "he", "she", "it", "we", "they", "what", "which", "who", "whom",
-})
+_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "must",
+        "shall",
+        "can",
+        "need",
+        "dare",
+        "ought",
+        "used",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "under",
+        "again",
+        "further",
+        "then",
+        "once",
+        "here",
+        "there",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "nor",
+        "not",
+        "only",
+        "own",
+        "same",
+        "so",
+        "than",
+        "too",
+        "very",
+        "just",
+        "and",
+        "but",
+        "if",
+        "or",
+        "because",
+        "until",
+        "while",
+        "this",
+        "that",
+        "these",
+        "those",
+        "i",
+        "you",
+        "he",
+        "she",
+        "it",
+        "we",
+        "they",
+        "what",
+        "which",
+        "who",
+        "whom",
+    }
+)
 
 
 def _extract_keywords(text: str) -> set[str]:
@@ -468,12 +558,8 @@ class NPCService:
             target_id = self._select_target(action_type, context)
 
             # Score the action
-            motivation = _score_motivation(
-                action_type, context.npc_profile.motivations
-            )
-            relationship = _score_relationship(
-                action_type, context.relationships, target_id
-            )
+            motivation = _score_motivation(action_type, context.npc_profile.motivations)
+            relationship = _score_relationship(action_type, context.relationships, target_id)
             personality = _score_personality(action_type, context.npc_profile)
             risk = _assess_risk(action_type, context)
 
@@ -517,7 +603,9 @@ class NPCService:
 
         if action_type in [ActionType.ATTACK, ActionType.THREATEN, ActionType.INTIMIDATE]:
             # Target most threatening entity
-            threats = [e for e in entities if e.apparent_threat > THREAT_THRESHOLD and not e.is_player]
+            threats = [
+                e for e in entities if e.apparent_threat > THREAT_THRESHOLD and not e.is_player
+            ]
             if threats:
                 threats.sort(key=lambda x: x.apparent_threat, reverse=True)
                 return threats[0].id
@@ -528,10 +616,7 @@ class NPCService:
 
         if action_type in [ActionType.HELP, ActionType.HEAL, ActionType.PROTECT]:
             # Target injured allies
-            allies = [
-                e for e in entities
-                if e.hp_percentage is not None and e.hp_percentage < 1.0
-            ]
+            allies = [e for e in entities if e.hp_percentage is not None and e.hp_percentage < 1.0]
             if allies:
                 allies.sort(key=lambda x: x.hp_percentage or 1.0)
                 return allies[0].id
@@ -646,7 +731,10 @@ class NPCService:
             importance += 0.2
 
         # Outcome affects importance
-        if event.outcome == EventOutcome.CRITICAL_SUCCESS or event.outcome == EventOutcome.CRITICAL_FAILURE:
+        if (
+            event.outcome == EventOutcome.CRITICAL_SUCCESS
+            or event.outcome == EventOutcome.CRITICAL_FAILURE
+        ):
             importance += 0.2
 
         return min(1.0, importance)
@@ -849,9 +937,7 @@ class NPCService:
 
         for memory in memories:
             # Calculate keyword-based relevance (future: vector similarity)
-            relevance = _calculate_keyword_relevance(
-                memory.description, context_keywords
-            )
+            relevance = _calculate_keyword_relevance(memory.description, context_keywords)
 
             # Use the model's retrieval score calculation
             score = memory.calculate_retrieval_score(relevance=relevance)
@@ -976,7 +1062,9 @@ class NPCService:
                 return "Hello, traveler."
 
         # Detect question
-        if "?" in player_input or player_input.lower().startswith(("who", "what", "where", "when", "why", "how")):
+        if "?" in player_input or player_input.lower().startswith(
+            ("who", "what", "where", "when", "why", "how")
+        ):
             if constraints.trust_level == "suspicious":
                 return "I don't know anything about that. And even if I did, why would I tell you?"
             elif constraints.trust_level == "trusting":

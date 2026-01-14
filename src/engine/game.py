@@ -833,7 +833,7 @@ class GameEngine:
             session.universe_id,
             relationship_type="LOCATED_IN",
         )
-        for rel in located_in_rels[:self.config.max_nearby_entities]:
+        for rel in located_in_rels[: self.config.max_nearby_entities]:
             entity = self.dolt.get_entity(rel.from_entity_id, session.universe_id)
             if entity and entity.id != npc_id:
                 entities_present.append(
@@ -896,8 +896,7 @@ class GameEngine:
         action_filter = None
         if available_actions:
             action_filter = [
-                ActionType(a) for a in available_actions
-                if a in [at.value for at in ActionType]
+                ActionType(a) for a in available_actions if a in [at.value for at in ActionType]
             ]
 
         # Get decision

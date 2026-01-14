@@ -428,9 +428,7 @@ class InMemoryNeo4jRepository:
         limit: int = 20,
     ) -> list[NPCMemory]:
         """Get all memories for an NPC, ordered by timestamp (newest first)."""
-        memories = [
-            deepcopy(m) for m in self._memories.values() if m.npc_id == npc_id
-        ]
+        memories = [deepcopy(m) for m in self._memories.values() if m.npc_id == npc_id]
         memories.sort(key=lambda m: m.timestamp, reverse=True)
         return memories[:limit]
 

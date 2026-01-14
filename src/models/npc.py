@@ -580,19 +580,13 @@ class CombatEvaluation(BaseModel):
     def should_flee(self) -> bool:
         """Determine if NPC should attempt to flee."""
         return (
-            self.hp_percentage < 0.25
-            and self.total_enemy_threat > 0.5
-            and self.escape_routes > 0
+            self.hp_percentage < 0.25 and self.total_enemy_threat > 0.5 and self.escape_routes > 0
         )
 
     @property
     def should_surrender(self) -> bool:
         """Determine if NPC should surrender."""
-        return (
-            self.hp_percentage < 0.1
-            and self.escape_routes == 0
-            and self.allies_count == 0
-        )
+        return self.hp_percentage < 0.1 and self.escape_routes == 0 and self.allies_count == 0
 
 
 def get_combat_state(
