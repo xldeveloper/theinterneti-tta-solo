@@ -616,14 +616,18 @@ class NPCService:
     def get_or_create_profile(
         self,
         entity_id: UUID,
-        default_traits: dict | None = None,
+        default_traits: dict[str, int] | None = None,
     ) -> NPCProfile:
         """
         Get an existing profile or create a default one.
 
+        Note: Default profiles created by this method are NOT automatically
+        persisted to the database. Call save_profile() explicitly if you
+        want to persist a newly created profile.
+
         Args:
             entity_id: The entity to get/create profile for
-            default_traits: Optional default trait values
+            default_traits: Optional default trait values (openness, conscientiousness, etc.)
 
         Returns:
             The loaded or newly created profile

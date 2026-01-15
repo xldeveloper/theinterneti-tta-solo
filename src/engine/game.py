@@ -1031,22 +1031,8 @@ class GameEngine:
                         )
 
                 # NPC's own relationship with the target also updates
-                if combat_turn.target_id:
-                    # Create a DAMAGE event for the NPC's perspective
-                    damage_event = Event(
-                        id=combat_event.id,
-                        universe_id=session.universe_id,
-                        event_type=EventType.DAMAGE if attack_result.hit else EventType.ATTACK,
-                        actor_id=npc_id,
-                        target_id=combat_turn.target_id,
-                        location_id=session.location_id,
-                        outcome=combat_event.outcome,
-                    )
-                    self.npc_service.update_relationship(
-                        npc_id=npc_id,
-                        target_id=combat_turn.target_id,
-                        event=damage_event,
-                    )
+                # The attacker's trust in their target typically doesn't change
+                # from attacking them, but witnessing the combat does affect others
 
         elif combat_turn.combat_state in [CombatState.FLEEING, CombatState.SURRENDERING]:
             # Record flee/surrender event
