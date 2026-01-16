@@ -83,6 +83,16 @@ class NPCGenerationParams(BaseModel):
     initial_attitude: str = "neutral"  # friendly, neutral, hostile
 
 
+class EnvironmentFeatureParams(BaseModel):
+    """Parameters for generating an environment feature."""
+
+    name: str
+    description: str
+    feature_type: str = "discovery"  # passage, hazard, discovery, hideout, obstacle
+    is_dangerous: bool = False
+    interaction_hint: str | None = None
+
+
 # =============================================================================
 # NPC Templates by Location Type
 # =============================================================================
@@ -245,6 +255,25 @@ Guidelines:
 - Include 1-3 motivations
 - Keep descriptions vivid but concise
 - Make names memorable and fantasy-appropriate"""
+
+
+ENVIRONMENT_GENERATION_SYSTEM_PROMPT = """You are an environment feature generator for a tabletop RPG. Generate contextually appropriate location features that add mystery, danger, or opportunity.
+
+Output ONLY valid JSON with this exact structure (no markdown, no explanation):
+{
+    "name": "string (short, evocative name for the feature)",
+    "description": "1-2 sentence atmospheric description",
+    "feature_type": "passage|hazard|discovery|hideout|obstacle",
+    "is_dangerous": true|false,
+    "interaction_hint": "optional hint about what players might do with it"
+}
+
+Guidelines:
+- Match the feature to the location type and danger level
+- Higher danger = more ominous/threatening features
+- Features should feel discoverable and interactive
+- Keep names short (1-3 words)
+- Descriptions should be atmospheric and evocative"""
 
 
 # Environment feature templates
@@ -854,20 +883,20 @@ Output JSON only, no other text."""
         session: Session,
         is_hazard: bool = False,
     ) -> MoveExecutionResult:
-        """Add a new feature to the current location."""
-        location_type = self._get_location_type(context)
-        features = ENVIRONMENT_FEATURES.get(location_type, ENVIRONMENT_FEATURES["default"])
+        """
+        Add a new feature to the current location.
 
-        feature_name, feature_desc = random.choice(features)
-
-        if is_hazard:
-            feature_desc = feature_desc.rstrip(".") + ", and it looks dangerous."
+        Uses LLM to generate contextually appropriate features,
+        falls back to templates if LLM unavailable or fails.
+        """
+        # Generate feature parameters (LLM or template)
+        feature_params = await self._generate_environment_feature(context, is_hazard)
 
         # Create feature entity
         feature_entity = create_character(  # Using create_character for simplicity
             universe_id=session.universe_id,
-            name=feature_name,
-            description=feature_desc,
+            name=feature_params.name,
+            description=feature_params.description,
             hp_max=1,  # Not really a character but works for now
             ac=10,
         )
@@ -883,14 +912,140 @@ Output JSON only, no other text."""
         )
         self.neo4j.create_relationship(contains_rel)
 
-        narrative = f"The environment shifts... {feature_desc}"
+        narrative = f"The environment shifts... {feature_params.description}"
 
         return MoveExecutionResult(
             success=True,
             narrative=narrative,
             entities_created=[feature_entity.id],
             relationships_created=[contains_rel.id],
-            state_changes=[f"New feature: {feature_name}"],
+            state_changes=[f"New feature: {feature_params.name}"],
+        )
+
+    async def _generate_environment_feature(
+        self,
+        context: Context,
+        is_hazard: bool,
+    ) -> EnvironmentFeatureParams:
+        """
+        Generate environment feature parameters using LLM or templates.
+
+        Falls back to templates if LLM is unavailable or fails.
+        """
+        # Try LLM generation if available
+        if self.llm is not None and self.llm.is_available:
+            try:
+                return await self._llm_generate_environment_feature(context, is_hazard)
+            except Exception as e:
+                logger.warning(f"LLM environment generation failed, using templates: {e}")
+
+        # Fallback to templates
+        return self._template_environment_feature(context, is_hazard)
+
+    async def _llm_generate_environment_feature(
+        self,
+        context: Context,
+        is_hazard: bool,
+    ) -> EnvironmentFeatureParams:
+        """
+        Generate environment feature using LLM.
+
+        Raises:
+            ValueError: If LLM response cannot be parsed
+            RuntimeError: If LLM is not available
+        """
+        if self.llm is None:
+            raise RuntimeError("LLM service not available")
+
+        # Build prompt
+        prompt = self._build_environment_generation_prompt(context, is_hazard)
+
+        # Generate with LLM
+        response = await self.llm.provider.complete(
+            messages=[
+                {"role": "system", "content": ENVIRONMENT_GENERATION_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=256,
+            temperature=0.8,
+        )
+
+        # Parse JSON response
+        return self._parse_environment_response(response, is_hazard)
+
+    def _build_environment_generation_prompt(self, context: Context, is_hazard: bool) -> str:
+        """Build the user prompt for environment feature generation."""
+        location_name = context.location.name if context.location else "Unknown"
+        location_desc = context.location.description if context.location else ""
+
+        hazard_instruction = "The feature should be DANGEROUS or threatening." if is_hazard else ""
+
+        prompt = f"""Current Location: {location_name}
+Location Description: {location_desc}
+Danger Level: {context.danger_level}/20
+Mood: {context.mood or "neutral"}
+{hazard_instruction}
+
+Generate an environment feature that fits this location.
+Output JSON only, no other text."""
+
+        return prompt
+
+    def _parse_environment_response(
+        self, response: str, is_hazard: bool
+    ) -> EnvironmentFeatureParams:
+        """Parse LLM response into EnvironmentFeatureParams."""
+        # Clean up response - handle markdown code blocks
+        cleaned = response.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            json_lines = []
+            in_block = False
+            for line in lines:
+                if line.startswith("```"):
+                    in_block = not in_block
+                    continue
+                if in_block or not line.startswith("```"):
+                    json_lines.append(line)
+            cleaned = "\n".join(json_lines).strip()
+
+        # Try to extract JSON if there's surrounding text
+        if not cleaned.startswith("{"):
+            start = cleaned.find("{")
+            end = cleaned.rfind("}") + 1
+            if start != -1 and end > start:
+                cleaned = cleaned[start:end]
+
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse environment JSON: {e}") from e
+
+        return EnvironmentFeatureParams(
+            name=data.get("name", "Strange Feature"),
+            description=data.get("description", "Something catches your eye..."),
+            feature_type=data.get("feature_type", "discovery"),
+            is_dangerous=data.get("is_dangerous", is_hazard),
+            interaction_hint=data.get("interaction_hint"),
+        )
+
+    def _template_environment_feature(
+        self, context: Context, is_hazard: bool
+    ) -> EnvironmentFeatureParams:
+        """Generate environment feature from templates."""
+        location_type = self._get_location_type(context)
+        features = ENVIRONMENT_FEATURES.get(location_type, ENVIRONMENT_FEATURES["default"])
+
+        feature_name, feature_desc = random.choice(features)
+
+        if is_hazard:
+            feature_desc = feature_desc.rstrip(".") + ", and it looks dangerous."
+
+        return EnvironmentFeatureParams(
+            name=feature_name,
+            description=feature_desc,
+            feature_type="hazard" if is_hazard else "discovery",
+            is_dangerous=is_hazard,
         )
 
     async def _add_atmosphere(

@@ -890,3 +890,126 @@ class TestLLMNPCGeneration:
         assert llm_executor._clamp_trait(50) == 50
         assert llm_executor._clamp_trait(None) == 50
         assert llm_executor._clamp_trait(50.7) == 50  # Float to int
+
+
+# =============================================================================
+# LLM Environment Feature Generation Tests
+# =============================================================================
+
+
+class TestLLMEnvironmentGeneration:
+    """Tests for LLM-powered environment feature generation."""
+
+    @pytest.fixture
+    def mock_llm(self):
+        """Create a mock LLM service."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        llm = MagicMock()
+        llm.is_available = True
+        llm.provider = MagicMock()
+        llm.provider.complete = AsyncMock()
+        return llm
+
+    @pytest.fixture
+    def llm_executor(self, dolt, neo4j, npc_service, mock_llm):
+        """Create a MoveExecutor with mock LLM."""
+        return MoveExecutor(
+            dolt=dolt,
+            neo4j=neo4j,
+            npc_service=npc_service,
+            llm=mock_llm,
+        )
+
+    @pytest.mark.asyncio
+    async def test_llm_environment_generation_parses_valid_json(
+        self, llm_executor, mock_llm, dungeon_context, session
+    ):
+        """LLM environment generation should parse valid JSON response."""
+        mock_llm.provider.complete.return_value = """{
+            "name": "Collapsed Archway",
+            "description": "An ancient stone arch has crumbled, revealing a dark passage beyond.",
+            "feature_type": "passage",
+            "is_dangerous": false,
+            "interaction_hint": "The rubble could be climbed over with care."
+        }"""
+
+        from src.services.move_executor import EnvironmentFeatureParams
+
+        params = await llm_executor._llm_generate_environment_feature(
+            dungeon_context, is_hazard=False
+        )
+
+        assert isinstance(params, EnvironmentFeatureParams)
+        assert params.name == "Collapsed Archway"
+        assert "dark passage" in params.description
+        assert params.feature_type == "passage"
+
+    @pytest.mark.asyncio
+    async def test_llm_environment_generation_handles_markdown(
+        self, llm_executor, mock_llm, dungeon_context, session
+    ):
+        """Should handle JSON wrapped in markdown code blocks."""
+        mock_llm.provider.complete.return_value = """```json
+{
+    "name": "Pit of Spikes",
+    "description": "A deep pit with sharpened stakes at the bottom.",
+    "feature_type": "hazard",
+    "is_dangerous": true
+}
+```"""
+
+        params = await llm_executor._llm_generate_environment_feature(
+            dungeon_context, is_hazard=True
+        )
+
+        assert params.name == "Pit of Spikes"
+        assert params.is_dangerous is True
+
+    @pytest.mark.asyncio
+    async def test_llm_environment_generation_falls_back_on_invalid_json(
+        self, llm_executor, mock_llm, dungeon_context, session
+    ):
+        """Invalid JSON should fall back to templates."""
+        mock_llm.provider.complete.return_value = "This is not valid JSON!"
+
+        # Should use template fallback
+        params = await llm_executor._generate_environment_feature(
+            dungeon_context, is_hazard=False
+        )
+
+        # Should still return valid params from template
+        assert params.name
+        assert params.description
+
+    @pytest.mark.asyncio
+    async def test_llm_environment_generation_falls_back_on_exception(
+        self, llm_executor, mock_llm, dungeon_context, session
+    ):
+        """LLM exceptions should fall back to templates."""
+        mock_llm.provider.complete.side_effect = RuntimeError("API error")
+
+        params = await llm_executor._generate_environment_feature(
+            dungeon_context, is_hazard=False
+        )
+
+        # Should still return valid params from template
+        assert params.name
+        assert params.description
+
+    def test_template_environment_feature_respects_is_hazard(self, executor, dungeon_context):
+        """Template generation should mark hazards appropriately."""
+        params = executor._template_environment_feature(dungeon_context, is_hazard=True)
+
+        assert params.is_dangerous is True
+        assert "dangerous" in params.description.lower()
+
+    def test_build_environment_prompt_includes_context(self, llm_executor, dungeon_context):
+        """Prompt should include location and danger information."""
+        prompt = llm_executor._build_environment_generation_prompt(
+            dungeon_context, is_hazard=True
+        )
+
+        assert "Dark Dungeon" in prompt
+        assert "Danger Level:" in prompt
+        assert "DANGEROUS" in prompt
