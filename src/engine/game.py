@@ -29,6 +29,7 @@ from src.engine.models import (
 )
 from src.engine.router import SkillRouter
 from src.models import Entity, Event, EventOutcome, EventType, RelationshipType
+from src.services.move_executor import MoveExecutor
 from src.services.multiverse import MultiverseService
 from src.services.npc import NPCService
 
@@ -163,6 +164,7 @@ class GameEngine:
     router: SkillRouter = field(init=False)
     narrator: NarrativeGenerator = field(init=False)
     npc_service: NPCService = field(init=False)
+    move_executor: MoveExecutor = field(init=False)
 
     # Agent system (Phase 3)
     _orchestrator: AgentOrchestratorType | None = field(init=False, default=None)
@@ -179,6 +181,12 @@ class GameEngine:
             verbosity=self.config.verbosity,
         )
         self.npc_service = NPCService(dolt=self.dolt, neo4j=self.neo4j)
+        self.move_executor = MoveExecutor(
+            dolt=self.dolt,
+            neo4j=self.neo4j,
+            npc_service=self.npc_service,
+            llm=None,  # Set via set_llm_provider if needed
+        )
 
         # Initialize agent system if enabled
         if self.use_agents:
@@ -458,6 +466,13 @@ class GameEngine:
                 # Phase 3: Resolve mechanics
                 if turn.intent.type != IntentType.UNCLEAR:
                     skill_result = self.router.resolve(turn.intent, turn.context)
+
+                    # Execute GM move if one was triggered (Phase 4 enhancement)
+                    if skill_result.gm_move_type:
+                        skill_result = await self._execute_gm_move(
+                            skill_result, turn.context, session
+                        )
+
                     turn.skill_results.append(skill_result)
 
                     # Update location if movement succeeded
@@ -499,6 +514,77 @@ class GameEngine:
             processing_time_ms=turn.processing_time_ms,
             error=turn.error,
         )
+
+    async def _execute_gm_move(
+        self,
+        skill_result: SkillResult,
+        context: Context,
+        session: Session,
+    ) -> SkillResult:
+        """
+        Execute a GM move that was triggered by the PbtA system.
+
+        Takes the skill result with a gm_move_type, executes the move
+        via MoveExecutor, and returns an updated skill result with
+        any created entities.
+
+        Args:
+            skill_result: The skill result with gm_move_type set
+            context: Current game context
+            session: Active session
+
+        Returns:
+            Updated SkillResult with move execution results
+        """
+        from src.engine.pbta import GMMove, GMMoveType
+
+        # Reconstruct the GMMove from the skill result
+        try:
+            move_type = GMMoveType(skill_result.gm_move_type)
+        except ValueError:
+            # Unknown move type, return unchanged
+            return skill_result
+
+        move = GMMove(
+            type=move_type,
+            is_hard=move_type.value
+            in {"deal_damage", "use_monster_move", "separate_them", "take_away", "capture"},
+            description=skill_result.gm_move_description or "",
+            damage=skill_result.damage,
+        )
+
+        # Execute the move
+        exec_result = await self.move_executor.execute(
+            move=move,
+            context=context,
+            session=session,
+            trigger_reason="miss",
+        )
+
+        # Update skill result with execution results
+        updates = {
+            "entities_created": exec_result.entities_created,
+            "relationships_created": exec_result.relationships_created,
+            "move_used_fallback": exec_result.used_fallback,
+        }
+
+        # If the move executor generated better narrative, use it
+        if exec_result.narrative and exec_result.narrative != move.description:
+            # Append the move's narrative to the existing description
+            current_desc = skill_result.description or ""
+            # Replace the template description with the generated one
+            if (
+                skill_result.gm_move_description
+                and skill_result.gm_move_description in current_desc
+            ):
+                updates["description"] = current_desc.replace(
+                    skill_result.gm_move_description, exec_result.narrative
+                )
+            else:
+                updates["description"] = f"{current_desc} {exec_result.narrative}"
+            updates["gm_move_description"] = exec_result.narrative
+
+        return skill_result.model_copy(update=updates)
 
     async def _get_context(self, session: Session) -> Context:
         """
