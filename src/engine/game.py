@@ -7,7 +7,10 @@ Coordinates intent parsing, skill execution, and narrative generation.
 
 from __future__ import annotations
 
+import logging
 import time
+
+logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 from uuid import UUID, uuid4
@@ -29,6 +32,7 @@ from src.engine.models import (
 )
 from src.engine.router import SkillRouter
 from src.models import Entity, Event, EventOutcome, EventType, RelationshipType
+from src.services.llm import LLMService
 from src.services.move_executor import MoveExecutor
 from src.services.multiverse import MultiverseService
 from src.services.npc import NPCService
@@ -220,6 +224,15 @@ class GameEngine:
         # Also update agent if using agent system
         if self._orchestrator is not None:
             self._orchestrator.gm.intent_parser = HybridIntentParser(llm_provider=provider)
+
+    def set_llm_service(self, llm_service: LLMService) -> None:
+        """
+        Set the LLM service for move execution.
+
+        This enables LLM-powered NPC generation and environment features.
+        Use LLMService with an OpenRouterProvider or MockLLMProvider.
+        """
+        self.move_executor.llm = llm_service
 
     def set_narrative_generator(self, generator: NarrativeGenerator) -> None:
         """Set a custom narrative generator."""
@@ -542,7 +555,11 @@ class GameEngine:
         try:
             move_type = GMMoveType(skill_result.gm_move_type)
         except ValueError:
-            # Unknown move type, return unchanged
+            # Unknown move type, log warning and return unchanged
+            logger.warning(
+                "Unknown GM move type %r encountered, skipping execution",
+                skill_result.gm_move_type,
+            )
             return skill_result
 
         move = GMMove(

@@ -17,7 +17,7 @@ from src.services.move_executor import (
     MoveExecutionResult,
     MoveExecutor,
     NPCGenerationParams,
-    NPC_TEMPLATES,
+    _NPC_TEMPLATES,
 )
 from src.services.npc import NPCService
 
@@ -264,7 +264,7 @@ class TestIntroduceNPC:
 
         # Run multiple times to verify template usage
         tavern_names = set()
-        for template in NPC_TEMPLATES.get("tavern", []):
+        for template in _NPC_TEMPLATES.get("tavern", []):
             tavern_names.update(template.names)
 
         found_tavern_npc = False
@@ -290,7 +290,7 @@ class TestIntroduceNPC:
         )
 
         dungeon_names = set()
-        for template in NPC_TEMPLATES.get("dungeon", []):
+        for template in _NPC_TEMPLATES.get("dungeon", []):
             dungeon_names.update(template.names)
 
         found_dungeon_npc = False

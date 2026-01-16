@@ -406,10 +406,10 @@ class TestTemplateFallback:
         self, move_executor, dolt, tavern_context, session
     ):
         """Tavern NPCs should have tavern-appropriate names from templates."""
-        from src.services.move_executor import NPC_TEMPLATES
+        from src.services.move_executor import _NPC_TEMPLATES
 
         tavern_names = set()
-        for template in NPC_TEMPLATES.get("tavern", []):
+        for template in _NPC_TEMPLATES.get("tavern", []):
             tavern_names.update(template.names)
 
         move = GMMove(

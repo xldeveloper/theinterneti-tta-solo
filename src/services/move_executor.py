@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from src.db.interfaces import DoltRepository, Neo4jRepository
 from src.engine.pbta import GMMove, GMMoveType
-from src.models.entity import EntityType, create_character, create_location
+from src.models.entity import EntityType, create_character, create_item, create_location
 from src.models.npc import Motivation, create_npc_profile
 from src.models.relationships import Relationship, RelationshipType
 
@@ -110,7 +110,7 @@ class NPCTemplate:
     motivations: list[Motivation] = field(default_factory=list)
 
 
-NPC_TEMPLATES: dict[str, list[NPCTemplate]] = {
+_NPC_TEMPLATES: dict[str, list[NPCTemplate]] = {
     "tavern": [
         NPCTemplate(
             names=["Greta", "Old Tom", "Bron", "Mira the Red", "Stumpy Pete"],
@@ -228,7 +228,7 @@ NPC_TEMPLATES: dict[str, list[NPCTemplate]] = {
 # LLM Generation Prompts
 # =============================================================================
 
-NPC_GENERATION_SYSTEM_PROMPT = """You are an NPC generator for a tabletop RPG. Generate a contextually appropriate NPC.
+_NPC_GENERATION_SYSTEM_PROMPT = """You are an NPC generator for a tabletop RPG. Generate a contextually appropriate NPC.
 
 Output ONLY valid JSON with this exact structure (no markdown, no explanation):
 {
@@ -257,7 +257,7 @@ Guidelines:
 - Make names memorable and fantasy-appropriate"""
 
 
-ENVIRONMENT_GENERATION_SYSTEM_PROMPT = """You are an environment feature generator for a tabletop RPG. Generate contextually appropriate location features that add mystery, danger, or opportunity.
+_ENVIRONMENT_GENERATION_SYSTEM_PROMPT = """You are an environment feature generator for a tabletop RPG. Generate contextually appropriate location features that add mystery, danger, or opportunity.
 
 Output ONLY valid JSON with this exact structure (no markdown, no explanation):
 {
@@ -277,7 +277,7 @@ Guidelines:
 
 
 # Environment feature templates
-ENVIRONMENT_FEATURES: dict[str, list[tuple[str, str]]] = {
+_ENVIRONMENT_FEATURES: dict[str, list[tuple[str, str]]] = {
     "dungeon": [
         ("Hidden Passage", "A section of wall that slides aside, revealing darkness beyond..."),
         ("Collapsed Tunnel", "Rubble blocks what was once a passage, though gaps remain..."),
@@ -369,7 +369,13 @@ class MoveExecutor:
         try:
             return await generator(move, context, session, trigger_reason)
         except Exception as e:
-            # Graceful degradation - return narrative only
+            # Graceful degradation - return narrative only, but log the error
+            logger.error(
+                "Move executor failed for %s, falling back to narrative: %s",
+                move.type.value,
+                e,
+                exc_info=True,
+            )
             return MoveExecutionResult(
                 success=True,
                 narrative=move.description,
@@ -416,9 +422,9 @@ class MoveExecutor:
             extraversion=npc_params.extraversion,
             agreeableness=npc_params.agreeableness,
             neuroticism=npc_params.neuroticism,
-            motivations=npc_params.motivations or None,
+            motivations=npc_params.motivations if npc_params.motivations else None,
             speech_style=npc_params.speech_style,
-            quirks=npc_params.quirks or None,
+            quirks=npc_params.quirks if npc_params.quirks else None,
         )
         self.npc_service.save_profile(npc_profile)
 
@@ -657,8 +663,8 @@ class MoveExecutor:
         if self.llm is not None and self.llm.is_available:
             try:
                 return await self._llm_generate_npc(context, session, trigger_reason)
-            except Exception as e:
-                logger.warning(f"LLM NPC generation failed, using templates: {e}")
+            except (ValueError, RuntimeError, json.JSONDecodeError) as e:
+                logger.warning("LLM NPC generation failed, using templates: %s", e)
 
         # Fallback to templates
         return self._template_npc_parameters(context)
@@ -685,7 +691,7 @@ class MoveExecutor:
         # Generate with LLM
         response = await self.llm.provider.complete(
             messages=[
-                {"role": "system", "content": NPC_GENERATION_SYSTEM_PROMPT},
+                {"role": "system", "content": _NPC_GENERATION_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
             max_tokens=512,
@@ -763,8 +769,11 @@ Output JSON only, no other text."""
             try:
                 motivations.append(Motivation(m_str.lower()))
             except ValueError:
-                # Unknown motivation, skip
-                pass
+                logger.warning(
+                    "Unknown NPC motivation %r in LLM response; skipping. Known: %s",
+                    m_str,
+                    [m.value for m in Motivation],
+                )
 
         # Default to SURVIVAL if no valid motivations
         if not motivations:
@@ -799,7 +808,7 @@ Output JSON only, no other text."""
         location_type = self._get_location_type(context)
 
         # Get templates for this location type
-        templates = NPC_TEMPLATES.get(location_type, NPC_TEMPLATES["default"])
+        templates = _NPC_TEMPLATES.get(location_type, _NPC_TEMPLATES["default"])
         template = random.choice(templates)
 
         # Generate parameters from template
@@ -892,15 +901,14 @@ Output JSON only, no other text."""
         # Generate feature parameters (LLM or template)
         feature_params = await self._generate_environment_feature(context, is_hazard)
 
-        # Create feature entity
-        feature_entity = create_character(  # Using create_character for simplicity
+        # Create feature entity using create_item (proper factory for location features)
+        feature_entity = create_item(
             universe_id=session.universe_id,
             name=feature_params.name,
             description=feature_params.description,
-            hp_max=1,  # Not really a character but works for now
-            ac=10,
+            tags=["location_feature", feature_params.feature_type],
+            location_id=session.location_id,
         )
-        feature_entity.type = EntityType.ITEM
         self.dolt.save_entity(feature_entity)
 
         # Link to location via CONTAINS relationship
@@ -936,8 +944,8 @@ Output JSON only, no other text."""
         if self.llm is not None and self.llm.is_available:
             try:
                 return await self._llm_generate_environment_feature(context, is_hazard)
-            except Exception as e:
-                logger.warning(f"LLM environment generation failed, using templates: {e}")
+            except (ValueError, RuntimeError, json.JSONDecodeError) as e:
+                logger.warning("LLM environment generation failed, using templates: %s", e)
 
         # Fallback to templates
         return self._template_environment_feature(context, is_hazard)
@@ -963,7 +971,7 @@ Output JSON only, no other text."""
         # Generate with LLM
         response = await self.llm.provider.complete(
             messages=[
-                {"role": "system", "content": ENVIRONMENT_GENERATION_SYSTEM_PROMPT},
+                {"role": "system", "content": _ENVIRONMENT_GENERATION_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
             max_tokens=256,
@@ -1034,7 +1042,7 @@ Output JSON only, no other text."""
     ) -> EnvironmentFeatureParams:
         """Generate environment feature from templates."""
         location_type = self._get_location_type(context)
-        features = ENVIRONMENT_FEATURES.get(location_type, ENVIRONMENT_FEATURES["default"])
+        features = _ENVIRONMENT_FEATURES.get(location_type, _ENVIRONMENT_FEATURES["default"])
 
         feature_name, feature_desc = random.choice(features)
 
