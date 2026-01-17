@@ -331,11 +331,19 @@ class MoveExecutor:
     def __post_init__(self) -> None:
         """Initialize the generator registry."""
         self._generators = {
+            # Generative moves (create entities/relationships)
             GMMoveType.INTRODUCE_NPC: self._execute_introduce_npc,
             GMMoveType.CHANGE_ENVIRONMENT: self._execute_change_environment,
-            GMMoveType.TAKE_AWAY: self._execute_take_away,
             GMMoveType.CAPTURE: self._execute_capture,
+            GMMoveType.OFFER_OPPORTUNITY: self._execute_offer_opportunity,
+            # Effect moves (modify state)
+            GMMoveType.TAKE_AWAY: self._execute_take_away,
+            GMMoveType.DEAL_DAMAGE: self._execute_deal_damage,
+            GMMoveType.SEPARATE_THEM: self._execute_separate_them,
+            GMMoveType.ADVANCE_TIME: self._execute_advance_time,
+            # Narrative moves (atmosphere/warnings)
             GMMoveType.REVEAL_UNWELCOME_TRUTH: self._execute_reveal_truth,
+            GMMoveType.SHOW_DANGER: self._execute_show_danger,
         }
 
     async def execute(
@@ -642,6 +650,221 @@ class MoveExecutor:
             success=True,
             narrative=narrative,
             state_changes=["Unsettling revelation"],
+        )
+
+    async def _execute_show_danger(
+        self,
+        move: GMMove,
+        context: Context,
+        session: Session,
+        trigger_reason: str,
+    ) -> MoveExecutionResult:
+        """
+        Show signs of impending danger.
+
+        This is a soft move - a warning that telegraphs something bad
+        without immediately causing consequences.
+        """
+        danger_signs = [
+            "You hear ominous sounds in the distance...",
+            "The air grows heavy with a sense of menace.",
+            "Something shifts in the shadows nearby.",
+            "A chill runs down your spine - danger is close.",
+            "Your instincts scream at you to be careful.",
+            "The ground trembles slightly beneath your feet.",
+            "An unnatural silence falls over the area.",
+        ]
+
+        narrative = random.choice(danger_signs)
+
+        # Could add HAS_ATMOSPHERE relationship for persistent mood
+        return MoveExecutionResult(
+            success=True,
+            narrative=narrative,
+            state_changes=["Danger sensed"],
+        )
+
+    async def _execute_offer_opportunity(
+        self,
+        move: GMMove,
+        context: Context,
+        session: Session,
+        trigger_reason: str,
+    ) -> MoveExecutionResult:
+        """
+        Offer an opportunity with a cost or complication.
+
+        Creates an interactive element that the player might use,
+        but with potential downsides.
+        """
+        opportunities = [
+            ("Hidden Lever", "A lever protrudes from the wall. It could open a way forward... or trigger something worse."),
+            ("Abandoned Supplies", "You spot a discarded pack. Useful items, perhaps, but why was it abandoned here?"),
+            ("Strange Device", "An odd mechanism sits here, humming with energy. It looks operational."),
+            ("Cracked Wall", "A section of wall looks weakened. You might be able to break through."),
+            ("Glowing Runes", "Arcane symbols pulse with light. They seem to react to your presence."),
+        ]
+
+        name, description = random.choice(opportunities)
+
+        # Create an interactive feature
+        feature_entity = create_item(
+            universe_id=session.universe_id,
+            name=name,
+            description=description,
+            tags=["opportunity", "interactive"],
+            location_id=session.location_id,
+        )
+        self.dolt.save_entity(feature_entity)
+
+        # Link to location
+        contains_rel = Relationship(
+            universe_id=session.universe_id,
+            from_entity_id=session.location_id,
+            to_entity_id=feature_entity.id,
+            relationship_type=RelationshipType.CONTAINS,
+        )
+        self.neo4j.create_relationship(contains_rel)
+
+        narrative = f"An opportunity presents itself: {description}"
+
+        return MoveExecutionResult(
+            success=True,
+            narrative=narrative,
+            entities_created=[feature_entity.id],
+            relationships_created=[contains_rel.id],
+            state_changes=[f"Opportunity: {name}"],
+        )
+
+    async def _execute_deal_damage(
+        self,
+        move: GMMove,
+        context: Context,
+        session: Session,
+        trigger_reason: str,
+    ) -> MoveExecutionResult:
+        """
+        Deal damage to the actor.
+
+        The damage amount is typically set on the GMMove by the router.
+        This method handles the narrative and could apply the damage
+        to the character entity.
+        """
+        damage = move.damage or 0
+
+        if damage > 0:
+            # Get the actor entity and apply damage
+            actor_entity = self.dolt.get_entity(context.actor.id, session.universe_id)
+            if actor_entity and actor_entity.stats:
+                new_hp = max(0, actor_entity.stats.hp_current - damage)
+                actor_entity.stats.hp_current = new_hp
+                self.dolt.save_entity(actor_entity)
+
+            damage_sources = [
+                f"You take {damage} damage from the blow!",
+                f"Pain shoots through you as you suffer {damage} damage!",
+                f"The attack connects, dealing {damage} damage!",
+                f"You cry out as {damage} damage tears into you!",
+            ]
+            narrative = random.choice(damage_sources)
+
+            return MoveExecutionResult(
+                success=True,
+                narrative=narrative,
+                entities_modified=[context.actor.id],
+                state_changes=[f"Took {damage} damage"],
+            )
+
+        # No damage specified - just narrative
+        return MoveExecutionResult(
+            success=True,
+            narrative="You narrowly avoid the worst of it, but you know you won't be so lucky next time.",
+        )
+
+    async def _execute_separate_them(
+        self,
+        move: GMMove,
+        context: Context,
+        session: Session,
+        trigger_reason: str,
+    ) -> MoveExecutionResult:
+        """
+        Separate party members (for multi-character sessions).
+
+        In a solo game with one character, this becomes a narrative
+        moment about isolation or losing track of an NPC ally.
+        """
+        # Check if there are NPCs present who could be separated
+        npcs_present = [e for e in context.entities_present if e.type == "character"]
+
+        if npcs_present:
+            # Separate an NPC from the party
+            separated_npc = random.choice(npcs_present)
+
+            # Remove their LOCATED_IN relationship
+            old_rel = self.neo4j.get_relationship_between(
+                from_entity_id=separated_npc.id,
+                to_entity_id=session.location_id,
+                universe_id=session.universe_id,
+                relationship_type="LOCATED_IN",
+            )
+            if old_rel:
+                self.neo4j.delete_relationship(old_rel.id)
+
+            narrative = f"{separated_npc.name} vanishes from sight! You've been separated!"
+
+            return MoveExecutionResult(
+                success=True,
+                narrative=narrative,
+                entities_modified=[separated_npc.id],
+                state_changes=[f"Separated from {separated_npc.name}"],
+            )
+
+        # No one to separate - just isolation narrative
+        isolation_narratives = [
+            "The path behind you collapses - you're on your own now.",
+            "The fog rolls in thick, cutting you off from any allies.",
+            "You realize with a start that you've become completely turned around.",
+        ]
+
+        return MoveExecutionResult(
+            success=True,
+            narrative=random.choice(isolation_narratives),
+            state_changes=["Isolated"],
+        )
+
+    async def _execute_advance_time(
+        self,
+        move: GMMove,
+        context: Context,
+        session: Session,
+        trigger_reason: str,
+    ) -> MoveExecutionResult:
+        """
+        Advance time, potentially triggering consequences.
+
+        Could affect temporary conditions, wandering monsters,
+        or time-sensitive events.
+        """
+        time_passages = [
+            "Time passes... the shadows grow longer.",
+            "Hours slip by as you struggle with your situation.",
+            "When you finally recover your bearings, significant time has passed.",
+            "The passage of time weighs on you as you continue.",
+        ]
+
+        narrative = random.choice(time_passages)
+
+        # Could trigger additional effects:
+        # - Heal 1 HP if resting
+        # - Check for wandering encounters
+        # - Advance quest timers
+        # For now, just narrative
+
+        return MoveExecutionResult(
+            success=True,
+            narrative=narrative,
+            state_changes=["Time passed"],
         )
 
     # =========================================================================

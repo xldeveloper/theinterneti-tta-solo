@@ -134,16 +134,17 @@ class TestMoveExecutorBasics:
     @pytest.mark.asyncio
     async def test_narrative_only_move_returns_description(self, executor, basic_context, session):
         """Narrative-only moves should just return the description."""
+        # USE_MONSTER_MOVE is narrative-only (no executor implemented)
         move = GMMove(
-            type=GMMoveType.SHOW_DANGER,
-            is_hard=False,
-            description="Something dangerous lurks nearby...",
+            type=GMMoveType.USE_MONSTER_MOVE,
+            is_hard=True,
+            description="The creature lunges with supernatural speed!",
         )
 
         result = await executor.execute(move, basic_context, session)
 
         assert result.success
-        assert result.narrative == "Something dangerous lurks nearby..."
+        assert result.narrative == "The creature lunges with supernatural speed!"
         assert len(result.entities_created) == 0
 
     @pytest.mark.asyncio
@@ -1013,3 +1014,223 @@ class TestLLMEnvironmentGeneration:
         assert "Dark Dungeon" in prompt
         assert "Danger Level:" in prompt
         assert "DANGEROUS" in prompt
+
+
+# =============================================================================
+# Additional Move Type Tests
+# =============================================================================
+
+
+class TestShowDanger:
+    """Tests for the SHOW_DANGER move execution."""
+
+    @pytest.mark.asyncio
+    async def test_show_danger_returns_warning_narrative(self, executor, basic_context, session):
+        """SHOW_DANGER should return a warning narrative."""
+        move = GMMove(
+            type=GMMoveType.SHOW_DANGER,
+            is_hard=False,
+            description="Something dangerous lurks...",
+        )
+
+        result = await executor.execute(move, basic_context, session)
+
+        assert result.success
+        assert result.narrative
+        assert len(result.narrative) > 20
+        assert "Danger sensed" in result.state_changes
+
+
+class TestOfferOpportunity:
+    """Tests for the OFFER_OPPORTUNITY move execution."""
+
+    @pytest.mark.asyncio
+    async def test_offer_opportunity_creates_entity(
+        self, executor, dolt, basic_context, session
+    ):
+        """OFFER_OPPORTUNITY should create an interactive entity."""
+        move = GMMove(
+            type=GMMoveType.OFFER_OPPORTUNITY,
+            is_hard=False,
+            description="An opportunity presents itself...",
+        )
+
+        result = await executor.execute(move, basic_context, session)
+
+        assert result.success
+        assert len(result.entities_created) == 1
+        assert len(result.relationships_created) == 1
+        assert "opportunity" in result.narrative.lower()
+
+
+class TestDealDamage:
+    """Tests for the DEAL_DAMAGE move execution."""
+
+    @pytest.mark.asyncio
+    async def test_deal_damage_applies_damage(self, dolt, neo4j, npc_service, session):
+        """DEAL_DAMAGE should apply damage to the actor."""
+        from src.models import create_character
+
+        # Create a character with HP
+        char = create_character(
+            universe_id=session.universe_id,
+            name="Test Hero",
+            hp_max=20,
+        )
+        char.stats.hp_current = 20
+        dolt.save_entity(char)
+
+        context = Context(
+            actor=EntitySummary(
+                id=char.id,
+                name=char.name,
+                type="character",
+            ),
+            actor_inventory=[],
+            location=EntitySummary(
+                id=session.location_id,
+                name="Test Location",
+                type="location",
+            ),
+            entities_present=[],
+            exits=[],
+            known_entities=[],
+            recent_events=[],
+            mood=None,
+            danger_level=5,
+        )
+
+        executor = MoveExecutor(dolt=dolt, neo4j=neo4j, npc_service=npc_service)
+
+        move = GMMove(
+            type=GMMoveType.DEAL_DAMAGE,
+            is_hard=True,
+            description="Take damage!",
+            damage=5,
+        )
+
+        result = await executor.execute(move, context, session)
+
+        assert result.success
+        assert "5 damage" in result.narrative
+
+        # Verify HP was reduced
+        updated_char = dolt.get_entity(char.id, session.universe_id)
+        assert updated_char.stats.hp_current == 15
+
+    @pytest.mark.asyncio
+    async def test_deal_damage_no_damage_returns_narrative(
+        self, executor, basic_context, session
+    ):
+        """DEAL_DAMAGE with no damage should return warning narrative."""
+        move = GMMove(
+            type=GMMoveType.DEAL_DAMAGE,
+            is_hard=True,
+            description="A near miss!",
+            damage=0,
+        )
+
+        result = await executor.execute(move, basic_context, session)
+
+        assert result.success
+        assert "lucky" in result.narrative.lower()
+
+
+class TestSeparateThem:
+    """Tests for the SEPARATE_THEM move execution."""
+
+    @pytest.mark.asyncio
+    async def test_separate_them_with_npcs_separates_one(
+        self, dolt, neo4j, npc_service, session
+    ):
+        """SEPARATE_THEM with NPCs present should separate one."""
+        from src.models import create_character
+
+        # Create an NPC at the location
+        npc = create_character(
+            universe_id=session.universe_id,
+            name="Friendly Guide",
+            hp_max=10,
+        )
+        dolt.save_entity(npc)
+
+        # Create LOCATED_IN relationship
+        from src.models.relationships import Relationship, RelationshipType
+
+        located_rel = Relationship(
+            universe_id=session.universe_id,
+            from_entity_id=npc.id,
+            to_entity_id=session.location_id,
+            relationship_type=RelationshipType.LOCATED_IN,
+        )
+        neo4j.create_relationship(located_rel)
+
+        context = Context(
+            actor=EntitySummary(
+                id=session.character_id,
+                name="Hero",
+                type="character",
+            ),
+            actor_inventory=[],
+            location=EntitySummary(
+                id=session.location_id,
+                name="Test Location",
+                type="location",
+            ),
+            entities_present=[
+                EntitySummary(id=npc.id, name=npc.name, type="character"),
+            ],
+            exits=[],
+            known_entities=[],
+            recent_events=[],
+            mood=None,
+            danger_level=5,
+        )
+
+        executor = MoveExecutor(dolt=dolt, neo4j=neo4j, npc_service=npc_service)
+
+        move = GMMove(
+            type=GMMoveType.SEPARATE_THEM,
+            is_hard=True,
+            description="You're separated!",
+        )
+
+        result = await executor.execute(move, context, session)
+
+        assert result.success
+        assert "separated" in result.narrative.lower()
+
+    @pytest.mark.asyncio
+    async def test_separate_them_without_npcs_returns_isolation(
+        self, executor, basic_context, session
+    ):
+        """SEPARATE_THEM without NPCs should return isolation narrative."""
+        move = GMMove(
+            type=GMMoveType.SEPARATE_THEM,
+            is_hard=True,
+            description="You're cut off!",
+        )
+
+        result = await executor.execute(move, basic_context, session)
+
+        assert result.success
+        assert "Isolated" in result.state_changes
+
+
+class TestAdvanceTime:
+    """Tests for the ADVANCE_TIME move execution."""
+
+    @pytest.mark.asyncio
+    async def test_advance_time_returns_narrative(self, executor, basic_context, session):
+        """ADVANCE_TIME should return time passage narrative."""
+        move = GMMove(
+            type=GMMoveType.ADVANCE_TIME,
+            is_hard=False,
+            description="Time passes...",
+        )
+
+        result = await executor.execute(move, basic_context, session)
+
+        assert result.success
+        assert result.narrative
+        assert "Time passed" in result.state_changes
