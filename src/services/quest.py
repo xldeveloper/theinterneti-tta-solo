@@ -35,6 +35,19 @@ if TYPE_CHECKING:
 
 
 # =============================================================================
+# Constants
+# =============================================================================
+
+# Danger level system
+MAX_DANGER_LEVEL = 20
+DANGER_TO_DIFFICULTY_DIVISOR = 4  # Converts danger (0-20) to difficulty (1-5)
+
+# Enemy quantity ranges for hunt quests
+MIN_ENEMY_QUANTITY = 2
+MAX_ENEMY_QUANTITY = 5
+
+
+# =============================================================================
 # Result Models
 # =============================================================================
 
@@ -509,7 +522,7 @@ class QuestService:
         for t in templates:
             min_diff, max_diff = t.difficulty_range
             # Map danger level (0-20) to difficulty (1-5)
-            expected_diff = max(1, min(5, context.danger_level // 4 + 1))
+            expected_diff = max(1, min(5, context.danger_level // DANGER_TO_DIFFICULTY_DIVISOR + 1))
             if min_diff <= expected_diff <= max_diff:
                 suitable.append(t)
 
@@ -556,7 +569,7 @@ class QuestService:
             subs["item"] = "the object"
 
         # Enemy quantity
-        subs["quantity"] = str(random.randint(2, 5))
+        subs["quantity"] = str(random.randint(MIN_ENEMY_QUANTITY, MAX_ENEMY_QUANTITY))
 
         # Generate name and description
         name_pattern = random.choice(template.name_patterns)
@@ -604,7 +617,7 @@ class QuestService:
         min_xp, max_xp = template.reward_xp_range
 
         # Scale by difficulty/danger
-        difficulty_mult = 1.0 + (context.danger_level / 20)
+        difficulty_mult = 1.0 + (context.danger_level / MAX_DANGER_LEVEL)
         gold = int(random.randint(min_gold, max_gold) * difficulty_mult)
         xp = int(random.randint(min_xp, max_xp) * difficulty_mult)
 
@@ -615,7 +628,7 @@ class QuestService:
 
         # Calculate difficulty
         min_diff, max_diff = template.difficulty_range
-        difficulty = min(5, max(1, context.danger_level // 4 + 1))
+        difficulty = min(5, max(1, context.danger_level // DANGER_TO_DIFFICULTY_DIVISOR + 1))
         difficulty = max(min_diff, min(max_diff, difficulty))
 
         return create_quest(

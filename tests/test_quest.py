@@ -268,7 +268,8 @@ class TestQuest:
 class TestQuestService:
     """Tests for QuestService."""
 
-    def test_generate_quest_for_tavern(self, quest_service, universe_id, dolt, neo4j):
+    @pytest.mark.asyncio
+    async def test_generate_quest_for_tavern(self, quest_service, universe_id, dolt, neo4j):
         """generate_quest creates appropriate quest for tavern location."""
         # Create a tavern location
         location_id = uuid4()
@@ -307,16 +308,15 @@ class TestQuestService:
             location_id=location_id,
         )
 
-        import asyncio
-
-        result = asyncio.get_event_loop().run_until_complete(quest_service.generate_quest(context))
+        result = await quest_service.generate_quest(context)
 
         assert result.success is True
         assert result.quest is not None
         assert result.quest.status == QuestStatus.AVAILABLE
         assert len(result.quest.objectives) >= 1
 
-    def test_generate_quest_for_dungeon(self, quest_service, universe_id, dolt, neo4j):
+    @pytest.mark.asyncio
+    async def test_generate_quest_for_dungeon(self, quest_service, universe_id, dolt, neo4j):
         """generate_quest creates appropriate quest for dungeon location."""
         # Create a dungeon location
         location_id = uuid4()
@@ -335,16 +335,15 @@ class TestQuestService:
             location_id=location_id,
         )
 
-        import asyncio
-
-        result = asyncio.get_event_loop().run_until_complete(quest_service.generate_quest(context))
+        result = await quest_service.generate_quest(context)
 
         assert result.success is True
         assert result.quest is not None
         # Higher danger should give higher rewards
         assert result.quest.rewards.gold > 0 or result.quest.rewards.experience > 0
 
-    def test_generate_specific_quest_type(self, quest_service, universe_id, dolt):
+    @pytest.mark.asyncio
+    async def test_generate_specific_quest_type(self, quest_service, universe_id, dolt):
         """generate_quest can create specific quest types."""
         location_id = uuid4()
         location = create_location(
@@ -365,11 +364,7 @@ class TestQuestService:
             danger_level=8,
         )
 
-        import asyncio
-
-        result = asyncio.get_event_loop().run_until_complete(
-            quest_service.generate_quest(context, quest_type=QuestType.HUNT)
-        )
+        result = await quest_service.generate_quest(context, quest_type=QuestType.HUNT)
 
         assert result.success is True
         assert result.quest is not None

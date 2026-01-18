@@ -95,6 +95,14 @@ class EnvironmentFeatureParams(BaseModel):
 
 
 # =============================================================================
+# Constants
+# =============================================================================
+
+# Probability of generating a quest when OFFER_OPPORTUNITY is triggered
+_QUEST_OPPORTUNITY_CHANCE = 0.4
+
+
+# =============================================================================
 # NPC Templates by Location Type
 # =============================================================================
 
@@ -699,7 +707,7 @@ class MoveExecutor:
         - An interactive element that the player might use
         """
         # 40% chance to generate a quest if conditions are right
-        if self.quest_service is not None and random.random() < 0.4:
+        if self.quest_service is not None and random.random() < _QUEST_OPPORTUNITY_CHANCE:
             quest_result = await self._try_generate_quest_opportunity(context, session)
             if quest_result is not None:
                 return quest_result

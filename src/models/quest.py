@@ -131,8 +131,8 @@ class QuestReward(BaseModel):
     item_ids: list[UUID] = Field(default_factory=list)
     """Item entity IDs to give to player."""
 
-    reputation_changes: dict[str, int] = Field(default_factory=dict)
-    """NPC name -> reputation change amount."""
+    reputation_changes: dict[UUID, int] = Field(default_factory=dict)
+    """NPC ID -> reputation change amount."""
 
     unlocks_location_id: UUID | None = None
     """Location that becomes accessible."""
@@ -192,7 +192,7 @@ class Quest(BaseModel):
     rewards: QuestReward = Field(default_factory=QuestReward)
 
     # Timing
-    created_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     accepted_at: datetime | None = None
     expires_at: datetime | None = None
     completed_at: datetime | None = None
@@ -237,13 +237,13 @@ class Quest(BaseModel):
         """Mark quest as accepted by player."""
         if self.status == QuestStatus.AVAILABLE:
             self.status = QuestStatus.ACTIVE
-            self.accepted_at = datetime.now()
+            self.accepted_at = datetime.utcnow()
 
     def complete(self) -> None:
         """Mark quest as completed."""
         if self.status == QuestStatus.ACTIVE and self.is_complete:
             self.status = QuestStatus.COMPLETED
-            self.completed_at = datetime.now()
+            self.completed_at = datetime.utcnow()
 
     def fail(self) -> None:
         """Mark quest as failed."""
