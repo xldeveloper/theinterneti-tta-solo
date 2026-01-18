@@ -194,9 +194,16 @@ def create_starter_world(
         universe_id=universe.id,
         hp_max=28,
         ac=14,
-        abilities=AbilityScores.model_validate({
-            "str": 10, "dex": 14, "con": 12, "int": 13, "wis": 14, "cha": 16,
-        }),
+        abilities=AbilityScores.model_validate(
+            {
+                "str": 10,
+                "dex": 14,
+                "con": 12,
+                "int": 13,
+                "wis": 14,
+                "cha": 16,
+            }
+        ),
     )
     bartender.current_location_id = tavern.id
     dolt.save_entity(bartender)
@@ -217,12 +224,14 @@ def create_starter_world(
     npc_service.save_profile(ameiko_profile)
 
     # LOCATED_IN for bartender
-    neo4j.create_relationship(Relationship(
-        universe_id=universe.id,
-        from_entity_id=bartender.id,
-        to_entity_id=tavern.id,
-        relationship_type=RelationshipType.LOCATED_IN,
-    ))
+    neo4j.create_relationship(
+        Relationship(
+            universe_id=universe.id,
+            from_entity_id=bartender.id,
+            to_entity_id=tavern.id,
+            relationship_type=RelationshipType.LOCATED_IN,
+        )
+    )
 
     # Mysterious Stranger
     stranger = create_character(
@@ -235,9 +244,16 @@ def create_starter_world(
         universe_id=universe.id,
         hp_max=45,
         ac=16,
-        abilities=AbilityScores.model_validate({
-            "str": 14, "dex": 16, "con": 14, "int": 16, "wis": 15, "cha": 10,
-        }),
+        abilities=AbilityScores.model_validate(
+            {
+                "str": 14,
+                "dex": 16,
+                "con": 14,
+                "int": 16,
+                "wis": 15,
+                "cha": 10,
+            }
+        ),
     )
     stranger.current_location_id = tavern.id
     dolt.save_entity(stranger)
@@ -256,12 +272,14 @@ def create_starter_world(
     )
     npc_service.save_profile(stranger_profile)
 
-    neo4j.create_relationship(Relationship(
-        universe_id=universe.id,
-        from_entity_id=stranger.id,
-        to_entity_id=tavern.id,
-        relationship_type=RelationshipType.LOCATED_IN,
-    ))
+    neo4j.create_relationship(
+        Relationship(
+            universe_id=universe.id,
+            from_entity_id=stranger.id,
+            to_entity_id=tavern.id,
+            relationship_type=RelationshipType.LOCATED_IN,
+        )
+    )
 
     # Market Merchant
     merchant = create_character(
@@ -274,9 +292,16 @@ def create_starter_world(
         universe_id=universe.id,
         hp_max=15,
         ac=11,
-        abilities=AbilityScores.model_validate({
-            "str": 9, "dex": 12, "con": 10, "int": 14, "wis": 13, "cha": 17,
-        }),
+        abilities=AbilityScores.model_validate(
+            {
+                "str": 9,
+                "dex": 12,
+                "con": 10,
+                "int": 14,
+                "wis": 13,
+                "cha": 17,
+            }
+        ),
     )
     merchant.current_location_id = market.id
     dolt.save_entity(merchant)
@@ -295,12 +320,14 @@ def create_starter_world(
     )
     npc_service.save_profile(merchant_profile)
 
-    neo4j.create_relationship(Relationship(
-        universe_id=universe.id,
-        from_entity_id=merchant.id,
-        to_entity_id=market.id,
-        relationship_type=RelationshipType.LOCATED_IN,
-    ))
+    neo4j.create_relationship(
+        Relationship(
+            universe_id=universe.id,
+            from_entity_id=merchant.id,
+            to_entity_id=market.id,
+            relationship_type=RelationshipType.LOCATED_IN,
+        )
+    )
 
     # Alley Thief
     thief = create_character(
@@ -313,9 +340,16 @@ def create_starter_world(
         universe_id=universe.id,
         hp_max=22,
         ac=15,
-        abilities=AbilityScores.model_validate({
-            "str": 10, "dex": 18, "con": 12, "int": 13, "wis": 11, "cha": 14,
-        }),
+        abilities=AbilityScores.model_validate(
+            {
+                "str": 10,
+                "dex": 18,
+                "con": 12,
+                "int": 13,
+                "wis": 11,
+                "cha": 14,
+            }
+        ),
     )
     thief.current_location_id = alley.id
     dolt.save_entity(thief)
@@ -334,12 +368,14 @@ def create_starter_world(
     )
     npc_service.save_profile(thief_profile)
 
-    neo4j.create_relationship(Relationship(
-        universe_id=universe.id,
-        from_entity_id=thief.id,
-        to_entity_id=alley.id,
-        relationship_type=RelationshipType.LOCATED_IN,
-    ))
+    neo4j.create_relationship(
+        Relationship(
+            universe_id=universe.id,
+            from_entity_id=thief.id,
+            to_entity_id=alley.id,
+            relationship_type=RelationshipType.LOCATED_IN,
+        )
+    )
 
     # =========================================================================
     # Create Items
@@ -408,29 +444,40 @@ def create_starter_world(
         universe_id=universe.id,
         hp_max=12,
         ac=14,
-        abilities=AbilityScores.model_validate({
-            "str": 14, "dex": 13, "con": 14, "int": 10, "wis": 12, "cha": 11,
-        }),
+        abilities=AbilityScores.model_validate(
+            {
+                "str": 14,
+                "dex": 13,
+                "con": 14,
+                "int": 10,
+                "wis": 12,
+                "cha": 11,
+            }
+        ),
     )
     player.current_location_id = tavern.id
     dolt.save_entity(player)
 
     # Player location relationship
-    neo4j.create_relationship(Relationship(
-        universe_id=universe.id,
-        from_entity_id=player.id,
-        to_entity_id=tavern.id,
-        relationship_type=RelationshipType.LOCATED_IN,
-    ))
+    neo4j.create_relationship(
+        Relationship(
+            universe_id=universe.id,
+            from_entity_id=player.id,
+            to_entity_id=tavern.id,
+            relationship_type=RelationshipType.LOCATED_IN,
+        )
+    )
 
     # Player inventory relationships
     for item_id in [sword.id, potion.id, torch.id, rope.id]:
-        neo4j.create_relationship(Relationship(
-            universe_id=universe.id,
-            from_entity_id=player.id,
-            to_entity_id=item_id,
-            relationship_type=RelationshipType.CARRIES,
-        ))
+        neo4j.create_relationship(
+            Relationship(
+                universe_id=universe.id,
+                from_entity_id=player.id,
+                to_entity_id=item_id,
+                relationship_type=RelationshipType.CARRIES,
+            )
+        )
 
     return StarterWorldResult(
         universe=universe,

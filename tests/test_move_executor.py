@@ -14,13 +14,12 @@ from src.db.memory import InMemoryDoltRepository, InMemoryNeo4jRepository
 from src.engine.models import Context, EntitySummary, Session
 from src.engine.pbta import GMMove, GMMoveType
 from src.services.move_executor import (
+    _NPC_TEMPLATES,
     MoveExecutionResult,
     MoveExecutor,
     NPCGenerationParams,
-    _NPC_TEMPLATES,
 )
 from src.services.npc import NPCService
-
 
 # =============================================================================
 # Fixtures
@@ -533,7 +532,9 @@ class TestCapture:
         assert session.location_id == result.entities_created[0]
 
     @pytest.mark.asyncio
-    async def test_capture_creates_trapped_in_relationship(self, executor, neo4j, basic_context, session):
+    async def test_capture_creates_trapped_in_relationship(
+        self, executor, neo4j, basic_context, session
+    ):
         """CAPTURE should create a TRAPPED_IN relationship."""
         move = GMMove(
             type=GMMoveType.CAPTURE,
@@ -975,9 +976,7 @@ class TestLLMEnvironmentGeneration:
         mock_llm.provider.complete.return_value = "This is not valid JSON!"
 
         # Should use template fallback
-        params = await llm_executor._generate_environment_feature(
-            dungeon_context, is_hazard=False
-        )
+        params = await llm_executor._generate_environment_feature(dungeon_context, is_hazard=False)
 
         # Should still return valid params from template
         assert params.name
@@ -990,9 +989,7 @@ class TestLLMEnvironmentGeneration:
         """LLM exceptions should fall back to templates."""
         mock_llm.provider.complete.side_effect = RuntimeError("API error")
 
-        params = await llm_executor._generate_environment_feature(
-            dungeon_context, is_hazard=False
-        )
+        params = await llm_executor._generate_environment_feature(dungeon_context, is_hazard=False)
 
         # Should still return valid params from template
         assert params.name
@@ -1007,9 +1004,7 @@ class TestLLMEnvironmentGeneration:
 
     def test_build_environment_prompt_includes_context(self, llm_executor, dungeon_context):
         """Prompt should include location and danger information."""
-        prompt = llm_executor._build_environment_generation_prompt(
-            dungeon_context, is_hazard=True
-        )
+        prompt = llm_executor._build_environment_generation_prompt(dungeon_context, is_hazard=True)
 
         assert "Dark Dungeon" in prompt
         assert "Danger Level:" in prompt
@@ -1045,9 +1040,7 @@ class TestOfferOpportunity:
     """Tests for the OFFER_OPPORTUNITY move execution."""
 
     @pytest.mark.asyncio
-    async def test_offer_opportunity_creates_entity(
-        self, executor, dolt, basic_context, session
-    ):
+    async def test_offer_opportunity_creates_entity(self, executor, dolt, basic_context, session):
         """OFFER_OPPORTUNITY should create an interactive entity."""
         move = GMMove(
             type=GMMoveType.OFFER_OPPORTUNITY,
@@ -1119,9 +1112,7 @@ class TestDealDamage:
         assert updated_char.stats.hp_current == 15
 
     @pytest.mark.asyncio
-    async def test_deal_damage_no_damage_returns_narrative(
-        self, executor, basic_context, session
-    ):
+    async def test_deal_damage_no_damage_returns_narrative(self, executor, basic_context, session):
         """DEAL_DAMAGE with no damage should return warning narrative."""
         move = GMMove(
             type=GMMoveType.DEAL_DAMAGE,
@@ -1140,9 +1131,7 @@ class TestSeparateThem:
     """Tests for the SEPARATE_THEM move execution."""
 
     @pytest.mark.asyncio
-    async def test_separate_them_with_npcs_separates_one(
-        self, dolt, neo4j, npc_service, session
-    ):
+    async def test_separate_them_with_npcs_separates_one(self, dolt, neo4j, npc_service, session):
         """SEPARATE_THEM with NPCs present should separate one."""
         from src.models import create_character
 

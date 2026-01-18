@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import logging
 import time
-
-logger = logging.getLogger(__name__)
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 from uuid import UUID, uuid4
@@ -50,6 +48,8 @@ if TYPE_CHECKING:
     from src.engine.agents import (
         RulesLawyerAgent as RulesLawyerAgentType,
     )
+
+logger = logging.getLogger(__name__)
 
 # Module-level agent classes (lazy loaded)
 _AgentOrchestrator: type[AgentOrchestratorType] | None = None

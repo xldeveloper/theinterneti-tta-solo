@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from src.db.interfaces import DoltRepository, Neo4jRepository
 from src.engine.pbta import GMMove, GMMoveType
-from src.models.entity import EntityType, create_character, create_item, create_location
+from src.models.entity import create_character, create_item, create_location
 from src.models.npc import Motivation, create_npc_profile
 from src.models.relationships import Relationship, RelationshipType
 
@@ -615,9 +615,7 @@ class MoveExecutor:
         # Update session location
         session.location_id = trap_location.id
 
-        narrative = (
-            f"You find yourself trapped in a {trap_name.lower()}! {trap_desc}"
-        )
+        narrative = f"You find yourself trapped in a {trap_name.lower()}! {trap_desc}"
 
         return MoveExecutionResult(
             success=True,
@@ -698,11 +696,26 @@ class MoveExecutor:
         but with potential downsides.
         """
         opportunities = [
-            ("Hidden Lever", "A lever protrudes from the wall. It could open a way forward... or trigger something worse."),
-            ("Abandoned Supplies", "You spot a discarded pack. Useful items, perhaps, but why was it abandoned here?"),
-            ("Strange Device", "An odd mechanism sits here, humming with energy. It looks operational."),
-            ("Cracked Wall", "A section of wall looks weakened. You might be able to break through."),
-            ("Glowing Runes", "Arcane symbols pulse with light. They seem to react to your presence."),
+            (
+                "Hidden Lever",
+                "A lever protrudes from the wall. It could open a way forward... or trigger something worse.",
+            ),
+            (
+                "Abandoned Supplies",
+                "You spot a discarded pack. Useful items, perhaps, but why was it abandoned here?",
+            ),
+            (
+                "Strange Device",
+                "An odd mechanism sits here, humming with energy. It looks operational.",
+            ),
+            (
+                "Cracked Wall",
+                "A section of wall looks weakened. You might be able to break through.",
+            ),
+            (
+                "Glowing Runes",
+                "Arcane symbols pulse with light. They seem to react to your presence.",
+            ),
         ]
 
         name, description = random.choice(opportunities)

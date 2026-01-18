@@ -132,7 +132,9 @@ class TestStarterWorld:
     def test_custom_player_name(self, dolt, neo4j, npc_service):
         """Should use custom player name."""
         result = create_starter_world(
-            dolt, neo4j, npc_service,
+            dolt,
+            neo4j,
+            npc_service,
             player_name="Sir Lancelot",
         )
 

@@ -7,8 +7,6 @@ including PbtA move execution and procedural world generation.
 
 from __future__ import annotations
 
-from uuid import uuid4
-
 import pytest
 
 from src.db.memory import InMemoryDoltRepository, InMemoryNeo4jRepository
@@ -21,7 +19,6 @@ from src.models import (
     create_location,
 )
 from src.models.relationships import Relationship, RelationshipType
-
 
 # =============================================================================
 # Fixtures
@@ -106,14 +103,16 @@ def hero(dolt, neo4j, universe, tavern):
         universe_id=universe.id,
         hp_max=20,
         ac=14,
-        abilities=AbilityScores.model_validate({
-            "str": 14,
-            "dex": 12,
-            "con": 13,
-            "int": 10,
-            "wis": 11,
-            "cha": 10,
-        }),
+        abilities=AbilityScores.model_validate(
+            {
+                "str": 14,
+                "dex": 12,
+                "con": 13,
+                "int": 10,
+                "wis": 11,
+                "cha": 10,
+            }
+        ),
     )
     hero.current_location_id = tavern.id
     dolt.save_entity(hero)
@@ -249,18 +248,12 @@ class TestPbtAMoveExecution:
             "check the floor",
         ]
 
-        entities_before = len(dolt._entities.get(dolt.get_current_branch(), {}))
-
         for action in actions:
             result = await engine.process_turn(action, session.id)
             assert result.error is None
 
-        # After several actions in a dangerous area, we might have new entities
-        # (This depends on RNG - moves may or may not create entities)
-        entities_after = len(dolt._entities.get(dolt.get_current_branch(), {}))
-
-        # At minimum, the game should still be functional
-        assert True  # Smoke test passed
+        # Smoke test passed - game runs without errors in dangerous location
+        # Note: Entity creation depends on RNG (GM moves may or may not trigger)
 
     @pytest.mark.asyncio
     async def test_gm_move_creates_npc(self, engine, dolt, neo4j, session):
@@ -467,15 +460,11 @@ class TestEventRecording:
     @pytest.mark.asyncio
     async def test_action_creates_event(self, engine, dolt, session):
         """Actions should create events in Dolt."""
-        events_before = len(
-            dolt.get_events_at_location(session.universe_id, session.location_id)
-        )
+        events_before = len(dolt.get_events_at_location(session.universe_id, session.location_id))
 
         await engine.process_turn("look around", session.id)
 
-        events_after = len(
-            dolt.get_events_at_location(session.universe_id, session.location_id)
-        )
+        events_after = len(dolt.get_events_at_location(session.universe_id, session.location_id))
 
         assert events_after > events_before
 
