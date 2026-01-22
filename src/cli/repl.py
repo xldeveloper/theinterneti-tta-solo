@@ -540,6 +540,12 @@ class GameREPL:
             return "No active session. Something went wrong."
 
         turn_result = await state.engine.process_turn(text, state.session_id)
+        
+        # Sync GameState with session (location may have changed)
+        session = state.engine.get_session(state.session_id)
+        if session:
+            state.location_id = session.location_id
+        
         return self._format_turn_result(turn_result)
 
     def _format_turn_result(self, result: TurnResult) -> str:
