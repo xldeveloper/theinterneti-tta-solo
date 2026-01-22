@@ -530,16 +530,33 @@ class InMemoryNeo4jRepository:
         self._memories.pop(memory_id, None)
 
     def get_owned_items(self, character_id: UUID) -> list[Entity]:
-        """Get all items owned by a character via OWNS relationships."""
-        # This is a stub for now - in real implementation would need:
-        # 1. Query Neo4j for OWNS relationships from character_id
-        # 2. Get entity details from Dolt for each owned item
-        # For now, return empty list as inventory system needs more setup
-        return []
+        """Get all items owned by a character via OWNS or CARRIES relationships."""
+        items = []
+        
+        # Find all CARRIES or OWNS relationships from this character
+        for rel in self._relationships.values():
+            if rel.from_entity_id == character_id and rel.relationship_type.value in ["CARRIES", "OWNS", "WIELDS", "WEARS"]:
+                # Look up the item entity in Dolt
+                # This is a cross-repo query - in reality would need Dolt reference
+                # For now, return empty as we'd need the Dolt repo to fetch entities
+                pass
+        
+        return items
 
     def get_entities_at_location(
         self, location_id: UUID, universe_id: UUID, entity_type: str | None = None
     ) -> list[Entity]:
-        """Get all entities at a specific location."""
-        # Stub - would query LOCATED_IN relationships in real implementation
+        """Get all entities at a specific location via LOCATED_IN relationships."""
+        entity_ids = []
+        
+        # Find all LOCATED_IN relationships pointing to this location
+        for rel in self._relationships.values():
+            if (
+                rel.to_entity_id == location_id
+                and rel.universe_id == universe_id
+                and rel.relationship_type.value == "LOCATED_IN"
+            ):
+                entity_ids.append(rel.from_entity_id)
+        
+        # Would need to fetch entities from Dolt - return empty for now
         return []

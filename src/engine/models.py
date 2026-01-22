@@ -124,6 +124,11 @@ class SkillResult(BaseModel):
     move_used_fallback: bool = Field(
         default=False, description="True if move execution fell back to templates"
     )
+    
+    # Movement results
+    destination_location_id: UUID | None = Field(
+        default=None, description="New location ID if movement succeeded"
+    )
 
     def to_roll_summary(self, label: str = "Roll") -> RollSummary:
         """Convert to a RollSummary for display."""
@@ -171,6 +176,9 @@ class Context(BaseModel):
     location: EntitySummary
     entities_present: list[EntitySummary] = Field(default_factory=list)
     exits: list[str] = Field(default_factory=list)
+    exit_destinations: dict[str, UUID] = Field(
+        default_factory=dict, description="Map of direction -> destination location ID"
+    )
 
     # Relationships - entities the actor knows/has relationships with
     known_entities: list[RelationshipSummary] = Field(

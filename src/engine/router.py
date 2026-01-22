@@ -423,10 +423,14 @@ class SkillRouter:
                 description=f"You can't go {destination} from here.",
             )
 
+        # Get the destination location ID
+        destination_location_id = context.exit_destinations.get(destination.lower())
+        
         return SkillResult(
             success=True,
             outcome="success",
             description=f"You move {destination}.",
+            destination_location_id=destination_location_id,
         )
 
     def _resolve_talk(self, intent: Intent, context: Context) -> SkillResult:

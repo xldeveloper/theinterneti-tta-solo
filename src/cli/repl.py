@@ -254,38 +254,43 @@ class GameREPL:
         if state.character_id is None or state.universe_id is None:
             return "No character loaded."
 
-        # Get all items owned by character
-        items = state.engine.neo4j.get_owned_items(state.character_id)
-
-        if not items:
+        # Get inventory from context (already populated by engine)
+        # We can get it by querying relationships directly
+        inventory_rels = state.engine.neo4j.get_relationships(
+            state.character_id,
+            state.universe_id,
+            relationship_type=None,  # Get all
+        )
+        
+        # Filter for inventory relationships
+        item_ids = []
+        for rel in inventory_rels:
+            if rel.relationship_type.value in ["CARRIES", "WIELDS", "WEARS", "OWNS"]:
+                item_ids.append(rel.to_entity_id)
+        
+        if not item_ids:
             return "Your inventory is empty."
 
         lines = ["Inventory:", "-" * 40]
 
-        # Separate equipped vs backpack
-        equipped = [item for item in items if getattr(item, "equipped", False)]
-        backpack = [item for item in items if not getattr(item, "equipped", False)]
-
-        if equipped:
-            lines.append("  Equipped:")
-            for item in equipped:
-                item_desc = item.name
-                if hasattr(item, "properties") and item.properties:
-                    # Add item stats if available
-                    props = item.properties
-                    if hasattr(props, "damage"):
-                        item_desc += f" (+{props.damage} damage)"
-                    elif hasattr(props, "armor_class"):
-                        item_desc += f" (AC {props.armor_class})"
-                lines.append(f"    {item_desc}")
-            lines.append("")
+        # Get full entity details for each item
+        equipped = []
+        backpack = []
+        
+        for item_id in item_ids:
+            item = state.engine.dolt.get_entity(item_id, state.universe_id)
+            if item:
+                # Check if equipped (would need equipped flag in future)
+                # For now, just put everything in backpack
+                backpack.append(item)
 
         if backpack:
             lines.append(f"  Backpack ({len(backpack)} items):")
             for item in backpack:
-                quantity = getattr(item, "quantity", 1)
-                suffix = f" (x{quantity})" if quantity > 1 else ""
-                lines.append(f"    - {item.name}{suffix}")
+                # Group same items
+                lines.append(f"    - {item.name}")
+                if item.description and len(item.description) < 80:
+                    lines.append(f"      {item.description}")
         else:
             lines.append("  Backpack: Empty")
 
