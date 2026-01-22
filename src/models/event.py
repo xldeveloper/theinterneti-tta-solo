@@ -59,6 +59,16 @@ class EventType(str, Enum):
     SKILL_CHECK = "skill_check"
     SAVING_THROW = "saving_throw"
     ABILITY_CHECK = "ability_check"
+    ABILITY_USED = "ability_used"
+    ABILITY_FAILED = "ability_failed"
+
+    # Condition/effect events
+    CONDITION_APPLIED = "condition_applied"
+    CONDITION_REMOVED = "condition_removed"
+    EFFECT_APPLIED = "effect_applied"
+    EFFECT_EXPIRED = "effect_expired"
+    CONCENTRATION_CHECK = "concentration_check"
+    CONCENTRATION_BROKEN = "concentration_broken"
 
     # World events
     FORK = "fork"
