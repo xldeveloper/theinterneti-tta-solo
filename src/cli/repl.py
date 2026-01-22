@@ -113,6 +113,18 @@ class GameREPL:
                 description="Clear the screen",
                 handler=self._cmd_clear,
             ),
+            Command(
+                name="inventory",
+                aliases=["inv", "i"],
+                description="Show your inventory",
+                handler=self._cmd_inventory,
+            ),
+            Command(
+                name="quests",
+                aliases=["quest", "q"],
+                description="Show your quests",
+                handler=self._cmd_quests,
+            ),
         ]
 
         for cmd in commands:
@@ -236,6 +248,113 @@ class GameREPL:
         """Handle clear command."""
         os.system("cls" if os.name == "nt" else "clear")
         return None
+
+    def _cmd_inventory(self, state: GameState, args: list[str]) -> str | None:
+        """Handle inventory command."""
+        if state.character_id is None or state.universe_id is None:
+            return "No character loaded."
+
+        # Get all items owned by character
+        items = state.engine.neo4j.get_owned_items(state.character_id)
+
+        if not items:
+            return "Your inventory is empty."
+
+        lines = ["Inventory:", "-" * 40]
+
+        # Separate equipped vs backpack
+        equipped = [item for item in items if getattr(item, "equipped", False)]
+        backpack = [item for item in items if not getattr(item, "equipped", False)]
+
+        if equipped:
+            lines.append("  Equipped:")
+            for item in equipped:
+                item_desc = item.name
+                if hasattr(item, "properties") and item.properties:
+                    # Add item stats if available
+                    props = item.properties
+                    if hasattr(props, "damage"):
+                        item_desc += f" (+{props.damage} damage)"
+                    elif hasattr(props, "armor_class"):
+                        item_desc += f" (AC {props.armor_class})"
+                lines.append(f"    {item_desc}")
+            lines.append("")
+
+        if backpack:
+            lines.append(f"  Backpack ({len(backpack)} items):")
+            for item in backpack:
+                quantity = getattr(item, "quantity", 1)
+                suffix = f" (x{quantity})" if quantity > 1 else ""
+                lines.append(f"    - {item.name}{suffix}")
+        else:
+            lines.append("  Backpack: Empty")
+
+        return "\n".join(lines)
+
+    def _cmd_quests(self, state: GameState, args: list[str]) -> str | None:
+        """Handle quests command."""
+        if state.character_id is None or state.universe_id is None:
+            return "No character loaded."
+
+        from src.services.quest import QuestService
+
+        quest_service = QuestService(state.engine.dolt, state.engine.neo4j)
+
+        # Handle subcommands
+        subcommand = args[0].lower() if args else "active"
+
+        if subcommand == "completed":
+            # Get completed quests - for now return empty since we need to filter by character
+            return "You haven't completed any quests yet.\n(Quest tracking by character coming soon)"
+
+        elif subcommand == "available":
+            # Get available quests at current location
+            quests = quest_service.get_available_quests(state.universe_id)
+            if not quests:
+                return "No quests available at this location."
+            lines = ["Available Quests:", "-" * 40]
+            for quest in quests:
+                lines.append(f"  [ ] {quest.name}")
+                if quest.description:
+                    lines.append(f"      {quest.description}")
+            return "\n".join(lines)
+
+        else:  # Default: show active quests
+            quests = quest_service.get_active_quests(state.universe_id)
+
+            if not quests:
+                return "You have no active quests.\n\nTry '/quests available' to see available quests."
+
+            lines = ["Active Quests:", "-" * 40]
+            for quest in quests:
+                lines.append(f"  [!] {quest.name}")
+
+                # Show objectives
+                if quest.objectives:
+                    completed = sum(1 for obj in quest.objectives if obj.completed)
+                    total = len(quest.objectives)
+                    lines.append(f"      Progress: {completed}/{total} objectives")
+
+                    # Show first few objectives
+                    for i, obj in enumerate(quest.objectives[:3]):
+                        status = "[x]" if obj.completed else "[ ]"
+                        lines.append(f"      {status} {obj.description}")
+
+                # Show rewards
+                if quest.rewards:
+                    reward_strs = []
+                    for reward in quest.rewards:
+                        if reward.gold:
+                            reward_strs.append(f"{reward.gold} gold")
+                        if reward.item_id:
+                            reward_strs.append("special item")
+                    if reward_strs:
+                        lines.append(f"      Reward: {', '.join(reward_strs)}")
+
+                lines.append("")  # Blank line between quests
+
+            lines.append("Type '/quests available' to see more quests.")
+            return "\n".join(lines)
 
     def _is_command(self, text: str) -> bool:
         """Check if input is a special command."""

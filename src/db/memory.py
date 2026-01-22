@@ -528,3 +528,18 @@ class InMemoryNeo4jRepository:
     def delete_memory(self, memory_id: UUID) -> None:
         """Delete a memory."""
         self._memories.pop(memory_id, None)
+
+    def get_owned_items(self, character_id: UUID) -> list[Entity]:
+        """Get all items owned by a character via OWNS relationships."""
+        # This is a stub for now - in real implementation would need:
+        # 1. Query Neo4j for OWNS relationships from character_id
+        # 2. Get entity details from Dolt for each owned item
+        # For now, return empty list as inventory system needs more setup
+        return []
+
+    def get_entities_at_location(
+        self, location_id: UUID, universe_id: UUID, entity_type: str | None = None
+    ) -> list[Entity]:
+        """Get all entities at a specific location."""
+        # Stub - would query LOCATED_IN relationships in real implementation
+        return []
