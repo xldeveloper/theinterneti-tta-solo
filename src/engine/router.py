@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from src.engine.models import Context, Intent, IntentType, SkillResult
 from src.engine.ability_pbta import apply_ability_pbta
+from src.engine.models import Context, Intent, IntentType, SkillResult
 from src.engine.pbta import (
     PbtAOutcome,
     calculate_pbta_outcome,
@@ -478,7 +478,7 @@ class SkillRouter:
         """
         from uuid import UUID
 
-        from src.models.ability import AbilitySource, MechanismType
+        from src.models.ability import MechanismType
         from src.skills.dice import roll_d20
 
         ability_ctx = extra.get("ability")

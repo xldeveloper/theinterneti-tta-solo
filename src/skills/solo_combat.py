@@ -17,7 +17,6 @@ from pydantic import BaseModel, Field
 
 from src.skills.dice import roll_dice
 
-
 # =============================================================================
 # Configuration Models
 # =============================================================================
