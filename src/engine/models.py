@@ -179,6 +179,9 @@ class Context(BaseModel):
     exit_destinations: dict[str, UUID] = Field(
         default_factory=dict, description="Map of direction -> destination location ID"
     )
+    exit_names: dict[str, str] = Field(
+        default_factory=dict, description="Map of direction -> destination location name"
+    )
 
     # Relationships - entities the actor knows/has relationships with
     known_entities: list[RelationshipSummary] = Field(

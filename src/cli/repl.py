@@ -131,6 +131,12 @@ class GameREPL:
                 description="Talk to an NPC",
                 handler=self._cmd_talk,
             ),
+            Command(
+                name="abilities",
+                aliases=["ab", "spells"],
+                description="Show your abilities",
+                handler=self._cmd_abilities,
+            ),
         ]
 
         for cmd in commands:
@@ -171,8 +177,11 @@ class GameREPL:
         return "\n".join(lines)
 
     def _cmd_look(self, state: GameState, args: list[str]) -> str | None:
-        """Handle look command - returns None to process as regular input."""
-        return None  # Let the engine handle it
+        """Handle look command - enhanced version with more details."""
+        # Let the engine generate the base narrative through normal processing
+        # But we'll return None so it goes through the engine, then we can enhance later
+        # For now, the engine's look is already pretty good with NPCs and exits
+        return None  # Let the engine handle it - already shows location, NPCs, exits
 
     def _cmd_status(self, state: GameState, args: list[str]) -> str | None:
         """Handle status command."""
@@ -483,6 +492,62 @@ class GameREPL:
         
         import secrets
         return secrets.choice(greetings)
+
+    def _cmd_abilities(self, state: GameState, args: list[str]) -> str | None:
+        """Handle abilities command."""
+        if state.character_id is None or state.universe_id is None:
+            return "No character loaded."
+
+        # Get character entity
+        character = state.engine.dolt.get_entity(state.character_id, state.universe_id)
+        if not character:
+            return "Character not found."
+
+        # For now, show a placeholder with explanation
+        # In the future, this will query actual abilities from the character
+        lines = [
+            "Abilities:",
+            "-" * 40,
+            "",
+            "(Ability system is implemented but your character doesn't have any abilities yet.)",
+            "",
+            "The ability system supports:",
+            "  • Martial techniques (weapon skills, combat maneuvers)",
+            "  • Spells (arcane, divine, primal magic)",
+            "  • Tech abilities (gadgets, hacking, systems)",
+            "",
+            "When abilities are added to your character, they'll appear here with:",
+            "  • Usage tracking (charges, spell slots, cooldowns)",
+            "  • Detailed descriptions",
+            "  • Targeting information",
+            "  • Usage via /use <ability name>",
+            "",
+        ]
+
+        # Show what resources the character has for abilities
+        if character.stats:
+            stats = character.stats
+            lines.append("Your resources:")
+            
+            # Show level (determines proficiency bonus)
+            if stats.level:
+                prof_bonus = (stats.level - 1) // 4 + 2
+                lines.append(f"  Level: {stats.level} (Proficiency: +{prof_bonus})")
+            
+            # Show ability modifiers that affect abilities
+            if stats.abilities:
+                lines.append("")
+                lines.append("  Ability Modifiers:")
+                for attr, val in stats.abilities.model_dump().items():
+                    mod = (val - 10) // 2
+                    sign = "+" if mod >= 0 else ""
+                    attr_name = attr.upper().ljust(3)  # Left-justify to 3 chars
+                    lines.append(f"    {attr_name}: {sign}{mod}")
+        
+        lines.append("")
+        lines.append("Coming soon: Starter abilities will be added based on your character class!")
+        
+        return "\n".join(lines)
 
     def _is_command(self, text: str) -> bool:
         """Check if input is a special command."""

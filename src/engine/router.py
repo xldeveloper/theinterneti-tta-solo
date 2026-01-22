@@ -401,7 +401,19 @@ class SkillRouter:
             parts.append(f"You see: {', '.join(entity_names)}.")
 
         if context.exits:
-            parts.append(f"Exits: {', '.join(context.exits)}.")
+            # Enhanced: Show exit destinations with names
+            if context.exit_names:
+                exit_list = []
+                for direction in context.exits:
+                    dest_name = context.exit_names.get(direction.lower())
+                    if dest_name and dest_name != direction:
+                        # Show "direction (Destination Name)"
+                        exit_list.append(f"{direction} ({dest_name})")
+                    else:
+                        exit_list.append(direction)
+                parts.append(f"Exits: {', '.join(exit_list)}.")
+            else:
+                parts.append(f"Exits: {', '.join(context.exits)}.")
 
         description = " ".join(parts) if parts else "You look around but see nothing notable."
 
