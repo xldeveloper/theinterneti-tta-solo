@@ -32,9 +32,9 @@ jobs:
         
       - name: Auto-fix linter issues
         if: github.event_name == 'pull_request'
-        run: | 
-          uv run ruff check . 
-          --fix uv run ruff format .
+        run: |
+          uv run ruff check . --fix
+          uv run ruff format .
       
       - name: Commit fixes
         if: github.event_name == 'pull_request'
