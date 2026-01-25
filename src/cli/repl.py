@@ -17,6 +17,7 @@ from src.db.memory import InMemoryDoltRepository, InMemoryNeo4jRepository
 from src.engine import GameEngine
 from src.engine.models import EngineConfig, TurnResult
 from src.models.conversation import ConversationContext, DialogueOptions
+from src.models.entity import Entity
 from src.services.conversation import ConversationService
 from src.services.npc import NPCService
 from src.services.quest import QuestService
@@ -35,7 +36,7 @@ class GameState:
     running: bool = True
     conversation: ConversationContext | None = None
     """Active conversation if in conversation mode."""
-    pending_talk_npc: "Entity | None" = None
+    pending_talk_npc: Entity | None = None
     """NPC that player wants to talk to (for async handler)."""
 
 
