@@ -17,12 +17,23 @@ from src.content import create_starter_world
 from src.db.memory import InMemoryDoltRepository, InMemoryNeo4jRepository
 from src.engine import GameEngine
 from src.engine.models import EngineConfig, TurnResult
+from src.models.ability import (
+    Ability,
+    AbilitySource,
+    DamageEffect,
+    HealingEffect,
+    MechanismType,
+    Targeting,
+    TargetingType,
+)
 from src.models.conversation import ConversationContext, DialogueOptions
 from src.models.entity import Entity
 from src.models.relationships import Relationship, RelationshipType
+from src.models.resources import CooldownTracker, EntityResources, StressMomentumPool
 from src.services.conversation import ConversationService
 from src.services.npc import NPCService
 from src.services.quest import QuestService
+from src.skills.dice import roll_dice
 
 
 class ExitInfo(TypedDict):
@@ -47,6 +58,8 @@ class GameState:
     """Active conversation if in conversation mode."""
     pending_talk_npc: Entity | None = None
     """NPC that player wants to talk to (for async handler)."""
+    resources: EntityResources | None = None
+    """Character's resources and known abilities."""
 
 
 @dataclass
@@ -178,6 +191,18 @@ class GameREPL:
                 aliases=["ex", "doors"],
                 description="Show available exits",
                 handler=self._cmd_exits,
+            ),
+            Command(
+                name="use",
+                aliases=["cast", "activate"],
+                description="Use an ability",
+                handler=self._cmd_use,
+            ),
+            Command(
+                name="abilities",
+                aliases=["spells", "skills", "powers"],
+                description="Show your available abilities",
+                handler=self._cmd_abilities,
             ),
         ]
 
@@ -586,62 +611,6 @@ class GameREPL:
 
         return self._format_conversation(context.npc_name, response, options)
 
-    def _cmd_abilities(self, state: GameState, args: list[str]) -> str | None:
-        """Handle abilities command."""
-        if state.character_id is None or state.universe_id is None:
-            return "No character loaded."
-
-        # Get character entity
-        character = state.engine.dolt.get_entity(state.character_id, state.universe_id)
-        if not character:
-            return "Character not found."
-
-        # For now, show a placeholder with explanation
-        # In the future, this will query actual abilities from the character
-        lines = [
-            "Abilities:",
-            "-" * 40,
-            "",
-            "(Ability system is implemented but your character doesn't have any abilities yet.)",
-            "",
-            "The ability system supports:",
-            "  • Martial techniques (weapon skills, combat maneuvers)",
-            "  • Spells (arcane, divine, primal magic)",
-            "  • Tech abilities (gadgets, hacking, systems)",
-            "",
-            "When abilities are added to your character, they'll appear here with:",
-            "  • Usage tracking (charges, spell slots, cooldowns)",
-            "  • Detailed descriptions",
-            "  • Targeting information",
-            "  • Usage via /use <ability name>",
-            "",
-        ]
-
-        # Show what resources the character has for abilities
-        if character.stats:
-            stats = character.stats
-            lines.append("Your resources:")
-
-            # Show level (determines proficiency bonus)
-            if stats.level:
-                prof_bonus = (stats.level - 1) // 4 + 2
-                lines.append(f"  Level: {stats.level} (Proficiency: +{prof_bonus})")
-
-            # Show ability modifiers that affect abilities
-            if stats.abilities:
-                lines.append("")
-                lines.append("  Ability Modifiers:")
-                for attr, val in stats.abilities.model_dump().items():
-                    mod = (val - 10) // 2
-                    sign = "+" if mod >= 0 else ""
-                    attr_name = attr.upper().ljust(3)  # Left-justify to 3 chars
-                    lines.append(f"    {attr_name}: {sign}{mod}")
-
-        lines.append("")
-        lines.append("Coming soon: Starter abilities will be added based on your character class!")
-
-        return "\n".join(lines)
-
     def _cmd_shop(self, state: GameState, args: list[str]) -> str | None:
         """Handle shop/buy command - browse and purchase items from merchants."""
         if state.character_id is None or state.universe_id is None or state.location_id is None:
@@ -1013,6 +982,322 @@ class GameREPL:
 
         return None
 
+    # =========================================================================
+    # Ability Commands
+    # =========================================================================
+
+    def _cmd_use(self, state: GameState, args: list[str]) -> str | None:
+        """Handle use command - activate an ability."""
+        if state.character_id is None or state.universe_id is None:
+            return "No active session."
+
+        if state.resources is None:
+            return "You have no abilities."
+
+        if not args:
+            return self._cmd_abilities(state, [])
+
+        # Parse args: "/use fireball on goblin" or "/use healing word"
+        ability_name, target_name = self._parse_use_args(args)
+
+        # Look up ability
+        ability = state.resources.get_ability(ability_name)
+        if ability is None:
+            available = ", ".join(state.resources.list_abilities())
+            if available:
+                return (
+                    f"You don't know an ability called '{ability_name}'.\n\n"
+                    f"Your abilities: {available}"
+                )
+            return f"You don't know an ability called '{ability_name}'."
+
+        # Check and consume resources
+        resource_result = self._check_ability_resources(state.resources, ability)
+        if resource_result is not None:
+            return resource_result
+
+        # Resolve target
+        target = self._resolve_ability_target(state, ability, target_name)
+
+        # Execute the ability
+        result = self._execute_ability(state, ability, target)
+        return result
+
+    def _cmd_abilities(self, state: GameState, args: list[str]) -> str | None:
+        """Handle abilities command - show available abilities."""
+        if state.resources is None or not state.resources.abilities:
+            return "You have no abilities."
+
+        lines = ["Your Abilities:", "-" * 40]
+
+        for ability in state.resources.abilities:
+            # Build ability description
+            source_tag = f"[{ability.source.value}]"
+            effect_parts = []
+
+            if ability.damage:
+                effect_parts.append(f"{ability.damage.dice} {ability.damage.damage_type}")
+            if ability.healing:
+                heal_str = ability.healing.dice or ""
+                if ability.healing.flat_amount:
+                    heal_str += f"+{ability.healing.flat_amount}"
+                effect_parts.append(f"heal {heal_str}")
+
+            effect_str = ", ".join(effect_parts) if effect_parts else "utility"
+
+            # Resource cost
+            cost_str = self._format_ability_cost(ability)
+
+            lines.append(f"  {ability.name} {source_tag}")
+            lines.append(f"    {ability.description}")
+            lines.append(f"    Effect: {effect_str} | Cost: {cost_str}")
+            lines.append("")
+
+        # Show resource status
+        lines.append("-" * 40)
+        lines.append(self._format_resource_status(state.resources))
+        lines.append("")
+        lines.append("Use /use <ability> to activate.")
+
+        return "\n".join(lines)
+
+    def _parse_use_args(self, args: list[str]) -> tuple[str, str | None]:
+        """Parse use command arguments into ability name and optional target."""
+        # Look for "on" or "at" to split ability from target
+        for i, word in enumerate(args):
+            if word.lower() in ("on", "at"):
+                ability_name = " ".join(args[:i])
+                target_name = " ".join(args[i + 1 :])
+                return ability_name, target_name if target_name else None
+
+        # No target specified
+        return " ".join(args), None
+
+    def _check_ability_resources(self, resources: EntityResources, ability: Ability) -> str | None:
+        """
+        Check if character has resources for ability.
+
+        Returns error message if not available, None if OK (and consumes resource).
+        """
+        mechanism = ability.mechanism
+        details = ability.mechanism_details
+
+        if mechanism == MechanismType.SLOTS:
+            level = details.get("level", 1)
+            if not resources.has_spell_slot(level):
+                return f"Not enough spell slots. You need a level {level} slot."
+            resources.use_spell_slot(level)
+
+        elif mechanism == MechanismType.COOLDOWN:
+            cooldown = resources.get_cooldown(ability.name)
+            if cooldown is None:
+                # Create cooldown tracker from ability details
+                max_uses = details.get("max_uses", 1)
+                recharge = details.get("recharge_on_rest", "long")
+                from src.models.resources import CooldownTracker
+
+                cooldown = CooldownTracker(
+                    max_uses=max_uses, current_uses=max_uses, recharge_on_rest=recharge
+                )
+                resources.cooldowns[ability.name] = cooldown
+            elif not cooldown.has_uses():
+                return f"{ability.name} is on cooldown."
+            else:
+                cooldown.use()
+
+        elif mechanism == MechanismType.MOMENTUM:
+            cost = details.get("momentum_cost", 0)
+            if resources.stress_momentum is None:
+                return "You don't have a momentum pool."
+            if not resources.stress_momentum.spend_momentum(cost):
+                return (
+                    f"Not enough momentum. Need {cost}, have {resources.stress_momentum.momentum}."
+                )
+
+        elif mechanism == MechanismType.STRESS:
+            cost = details.get("stress_cost", 0)
+            if resources.stress_momentum is None:
+                return "You don't have a stress pool."
+            resources.stress_momentum.add_stress(cost)
+
+        # FREE or USAGE_DIE - allow
+        return None
+
+    def _resolve_ability_target(
+        self, state: GameState, ability: Ability, target_name: str | None
+    ) -> Entity | None:
+        """Resolve target for ability."""
+        if target_name is None:
+            # Self-targeting abilities don't need explicit target
+            if (
+                ability.targeting.type == TargetingType.SELF
+                and state.character_id
+                and state.universe_id
+            ):
+                return state.engine.dolt.get_entity(state.character_id, state.universe_id)
+            return None
+
+        target_lower = target_name.lower()
+
+        # Check for self-targeting
+        if target_lower in ("myself", "self", "me"):
+            if state.character_id and state.universe_id:
+                return state.engine.dolt.get_entity(state.character_id, state.universe_id)
+            return None
+
+        # Find entity by name at current location
+        if state.location_id and state.universe_id:
+            located_rels = state.engine.neo4j.get_relationships(
+                state.location_id,
+                state.universe_id,
+                relationship_type="LOCATED_IN",
+            )
+            for rel in located_rels:
+                entity = state.engine.dolt.get_entity(rel.from_entity_id, state.universe_id)
+                if entity and target_lower in entity.name.lower():
+                    return entity
+
+        return None
+
+    def _execute_ability(self, state: GameState, ability: Ability, target: Entity | None) -> str:
+        """Execute an ability and return the result description."""
+        lines = []
+        lines.append(f"You use {ability.name}!")
+
+        # Roll for effect
+        total_damage = 0
+        total_healing = 0
+
+        if ability.damage:
+            damage_roll = self._roll_dice(ability.damage.dice)
+            total_damage = damage_roll
+            lines.append(f"  Damage: {damage_roll} {ability.damage.damage_type}")
+
+            if target and target.stats:
+                # Apply damage to target
+                target.stats.hp_current = max(0, target.stats.hp_current - total_damage)
+                state.engine.dolt.save_entity(target)
+                if target.stats.hp_current <= 0:
+                    lines.append(f"  {target.name} is defeated!")
+                else:
+                    lines.append(
+                        f"  {target.name} takes {total_damage} damage! "
+                        f"({target.stats.hp_current}/{target.stats.hp_max} HP)"
+                    )
+
+        if ability.healing:
+            if ability.healing.dice:
+                heal_roll = self._roll_dice(ability.healing.dice)
+                if ability.healing.flat_amount:
+                    heal_roll += ability.healing.flat_amount
+                total_healing = heal_roll
+            else:
+                total_healing = ability.healing.flat_amount
+
+            # Apply healing to self or target
+            heal_target = target
+            if not heal_target and state.character_id and state.universe_id:
+                heal_target = state.engine.dolt.get_entity(state.character_id, state.universe_id)
+            if heal_target and heal_target.stats:
+                old_hp = heal_target.stats.hp_current
+                heal_target.stats.hp_current = min(
+                    heal_target.stats.hp_max, heal_target.stats.hp_current + total_healing
+                )
+                actual_heal = heal_target.stats.hp_current - old_hp
+                state.engine.dolt.save_entity(heal_target)
+                lines.append(
+                    f"  Healing: {actual_heal} HP restored "
+                    f"({heal_target.stats.hp_current}/{heal_target.stats.hp_max} HP)"
+                )
+
+        if ability.conditions:
+            cond_names = [c.condition for c in ability.conditions]
+            lines.append(f"  Conditions applied: {', '.join(cond_names)}")
+
+        return "\n".join(lines)
+
+    def _roll_dice(self, dice_str: str) -> int:
+        """Roll dice from a string like '2d6' or '1d10+5'."""
+        result = roll_dice(dice_str)
+        return result.total
+
+    def _format_ability_cost(self, ability: Ability) -> str:
+        """Format ability cost for display."""
+        mechanism = ability.mechanism
+        details = ability.mechanism_details
+
+        if mechanism == MechanismType.FREE:
+            return "Free"
+        elif mechanism == MechanismType.SLOTS:
+            level = details.get("level", 1)
+            return f"Level {level} spell slot"
+        elif mechanism == MechanismType.COOLDOWN:
+            max_uses = details.get("max_uses", 1)
+            recharge = details.get("recharge_on_rest", "long")
+            return f"{max_uses}/rest ({recharge})"
+        elif mechanism == MechanismType.MOMENTUM:
+            cost = details.get("momentum_cost", 0)
+            return f"{cost} momentum"
+        elif mechanism == MechanismType.STRESS:
+            cost = details.get("stress_cost", 0)
+            return f"{cost} stress"
+        elif mechanism == MechanismType.USAGE_DIE:
+            return "Usage die"
+        return "Unknown"
+
+    def _format_resource_status(self, resources: EntityResources) -> str:
+        """Format current resource status."""
+        parts = []
+
+        if resources.spell_slots:
+            slot_parts = []
+            for level, tracker in sorted(resources.spell_slots.items()):
+                slot_parts.append(f"{level}: {tracker.current_slots}/{tracker.max_slots}")
+            parts.append(f"Spell Slots: {', '.join(slot_parts)}")
+
+        if resources.stress_momentum:
+            pool = resources.stress_momentum
+            parts.append(f"Momentum: {pool.momentum}/{pool.momentum_max}")
+            parts.append(f"Stress: {pool.stress}/{pool.stress_max}")
+
+        return " | ".join(parts) if parts else "No tracked resources"
+
+    def _create_starter_resources(self) -> EntityResources:
+        """Create starter resources with basic abilities for new characters."""
+        # Create a basic martial character setup
+        second_wind = Ability(
+            name="Second Wind",
+            description="Draw on your stamina to heal yourself.",
+            source=AbilitySource.MARTIAL,
+            mechanism=MechanismType.COOLDOWN,
+            mechanism_details={"max_uses": 1, "recharge_on_rest": "short"},
+            healing=HealingEffect(dice="1d10", flat_amount=1),
+            targeting=Targeting(type=TargetingType.SELF),
+            action_cost="bonus",
+        )
+
+        power_strike = Ability(
+            name="Power Strike",
+            description="A powerful melee attack that deals extra damage.",
+            source=AbilitySource.MARTIAL,
+            mechanism=MechanismType.FREE,
+            mechanism_details={},
+            damage=DamageEffect(dice="1d8", damage_type="bludgeoning"),
+            targeting=Targeting(type=TargetingType.SINGLE, range_ft=5),
+            action_cost="action",
+        )
+
+        # Create resources with abilities and a stress/momentum pool
+        resources = EntityResources(
+            abilities=[second_wind, power_strike],
+            stress_momentum=StressMomentumPool(),
+            cooldowns={
+                "Second Wind": CooldownTracker(max_uses=1, current_uses=1, recharge_on_rest="short")
+            },
+        )
+
+        return resources
+
     def _is_command(self, text: str) -> bool:
         """Check if input is a special command."""
         return text.startswith("/")
@@ -1191,6 +1476,9 @@ class GameREPL:
                 location_id=state.location_id,
             )
             state.session_id = session.id
+
+        # Initialize character resources with starter abilities
+        state.resources = self._create_starter_resources()
 
         # Print banner
         self._print_banner()
