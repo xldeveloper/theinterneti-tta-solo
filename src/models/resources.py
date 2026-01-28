@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, model_validator
 
+from src.models.ability import Ability
+
 # =============================================================================
 # Usage Die System
 # =============================================================================
@@ -427,7 +429,7 @@ class EntityResources(BaseModel):
     """
     All resource pools for an entity.
 
-    Tracks usage dice, cooldowns, stress/momentum, and spell slots.
+    Tracks usage dice, cooldowns, stress/momentum, spell slots, and known abilities.
     """
 
     usage_dice: dict[str, UsageDie] = Field(default_factory=dict, description="Named usage dice")
@@ -440,6 +442,37 @@ class EntityResources(BaseModel):
     spell_slots: dict[int, SpellSlotTracker] | None = Field(
         default=None, description="Spell slots by level (1-9)"
     )
+    abilities: list[Ability] = Field(
+        default_factory=list, description="Abilities known by this entity"
+    )
+
+    def get_ability(self, name: str) -> Ability | None:
+        """
+        Look up ability by name (case-insensitive, supports partial match).
+
+        Args:
+            name: Ability name to search for.
+
+        Returns:
+            Matching Ability or None if not found.
+        """
+        name_lower = name.lower()
+
+        # Try exact match first
+        for ability in self.abilities:
+            if ability.name.lower() == name_lower:
+                return ability
+
+        # Try prefix match
+        for ability in self.abilities:
+            if ability.name.lower().startswith(name_lower):
+                return ability
+
+        return None
+
+    def list_abilities(self) -> list[str]:
+        """Get list of ability names."""
+        return [ability.name for ability in self.abilities]
 
     def has_spell_slot(self, level: int) -> bool:
         """Check if a spell slot of the given level is available."""
