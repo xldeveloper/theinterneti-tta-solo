@@ -1945,7 +1945,7 @@ class GameREPL:
         for result in results:
             if result.objective_updated and result.narrative:
                 if result.objective_completed:
-                    notifications.append(f"\n[Objective completed: {result.narrative}]")
+                    notifications.append(f"\n[{result.narrative}]")
                 else:
                     # Show progress update for multi-kill objectives
                     notifications.append(f"\n[{result.narrative}]")
