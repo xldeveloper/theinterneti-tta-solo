@@ -5,6 +5,7 @@ from __future__ import annotations
 from src.models.ability import (
     Ability,
     AbilitySource,
+    ConditionEffect,
     DamageEffect,
     HealingEffect,
     MechanismType,
@@ -342,3 +343,126 @@ class TestCleaveMultiTarget:
 
         assert not success
         assert pool.momentum == 1  # Unchanged
+
+
+# =============================================================================
+# Rogue Ability Tests
+# =============================================================================
+
+
+class TestRogueAbilities:
+    """Test Rogue ability configurations."""
+
+    def test_sneak_attack_ability(self):
+        """Test Sneak Attack ability properties - bonus damage on flanked targets."""
+        sneak_attack = Ability(
+            name="Sneak Attack",
+            description="Strike a distracted foe for devastating damage.",
+            source=AbilitySource.MARTIAL,
+            subtype="maneuver",
+            mechanism=MechanismType.FREE,
+            mechanism_details={},
+            damage=DamageEffect(dice="2d6", damage_type="piercing"),
+            targeting=Targeting(type=TargetingType.SINGLE, range_ft=5),
+            action_cost="free",
+            tags=["martial", "rogue", "precision", "sneak"],
+            prerequisites=["Target must be flanked or you must have advantage"],
+        )
+
+        assert sneak_attack.name == "Sneak Attack"
+        assert sneak_attack.source == AbilitySource.MARTIAL
+        assert sneak_attack.mechanism == MechanismType.FREE
+        assert sneak_attack.damage is not None
+        assert sneak_attack.damage.dice == "2d6"
+        assert sneak_attack.damage.damage_type == "piercing"
+        assert sneak_attack.action_cost == "free"
+        assert "rogue" in sneak_attack.tags
+        assert "sneak" in sneak_attack.tags
+        assert len(sneak_attack.prerequisites) == 1
+
+    def test_disengage_ability(self):
+        """Test Disengage ability properties - safe movement."""
+        disengage = Ability(
+            name="Disengage",
+            description="Your movement doesn't provoke opportunity attacks this turn.",
+            source=AbilitySource.MARTIAL,
+            subtype="maneuver",
+            mechanism=MechanismType.FREE,
+            mechanism_details={},
+            targeting=Targeting(type=TargetingType.SELF),
+            action_cost="bonus",
+            tags=["martial", "rogue", "movement", "defensive"],
+        )
+
+        assert disengage.name == "Disengage"
+        assert disengage.source == AbilitySource.MARTIAL
+        assert disengage.mechanism == MechanismType.FREE
+        assert disengage.action_cost == "bonus"
+        assert disengage.targeting.type == TargetingType.SELF
+        assert "movement" in disengage.tags
+        assert "rogue" in disengage.tags
+
+    def test_cheap_shot_ability(self):
+        """Test Cheap Shot ability properties - stun effect costing momentum."""
+        cheap_shot = Ability(
+            name="Cheap Shot",
+            description="A dirty trick that stuns your opponent.",
+            source=AbilitySource.MARTIAL,
+            subtype="maneuver",
+            mechanism=MechanismType.MOMENTUM,
+            mechanism_details={"momentum_cost": 3},
+            conditions=[
+                ConditionEffect(
+                    condition="stunned",
+                    duration_type="rounds",
+                    duration_value=1,
+                    save_ability="con",
+                )
+            ],
+            targeting=Targeting(type=TargetingType.SINGLE, range_ft=5),
+            action_cost="action",
+            tags=["martial", "rogue", "control", "dirty"],
+        )
+
+        assert cheap_shot.name == "Cheap Shot"
+        assert cheap_shot.source == AbilitySource.MARTIAL
+        assert cheap_shot.mechanism == MechanismType.MOMENTUM
+        assert cheap_shot.mechanism_details["momentum_cost"] == 3
+        assert len(cheap_shot.conditions) == 1
+        assert cheap_shot.conditions[0].condition == "stunned"
+        assert cheap_shot.conditions[0].duration_type == "rounds"
+        assert cheap_shot.conditions[0].duration_value == 1
+        assert cheap_shot.conditions[0].save_ability == "con"
+        assert "control" in cheap_shot.tags
+        assert "rogue" in cheap_shot.tags
+
+
+class TestCheapShotMomentumCost:
+    """Test Cheap Shot's momentum mechanics."""
+
+    def test_cheap_shot_costs_3_momentum(self):
+        """Test that Cheap Shot requires 3 momentum."""
+        pool = StressMomentumPool(momentum=4, momentum_max=5)
+
+        success = pool.spend_momentum(3)
+
+        assert success
+        assert pool.momentum == 1
+
+    def test_cheap_shot_insufficient_momentum(self):
+        """Test Cheap Shot fails without enough momentum."""
+        pool = StressMomentumPool(momentum=2, momentum_max=5)
+
+        success = pool.spend_momentum(3)
+
+        assert not success
+        assert pool.momentum == 2  # Unchanged
+
+    def test_cheap_shot_exactly_3_momentum(self):
+        """Test Cheap Shot with exactly 3 momentum."""
+        pool = StressMomentumPool(momentum=3, momentum_max=5)
+
+        success = pool.spend_momentum(3)
+
+        assert success
+        assert pool.momentum == 0

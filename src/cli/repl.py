@@ -20,6 +20,7 @@ from src.engine.models import EngineConfig, TurnResult
 from src.models.ability import (
     Ability,
     AbilitySource,
+    ConditionEffect,
     DamageEffect,
     HealingEffect,
     MechanismType,
@@ -1169,8 +1170,13 @@ class GameREPL:
                 for mod in ability.stat_modifiers:
                     sign = "+" if mod.modifier > 0 else ""
                     effect_parts.append(f"{sign}{mod.modifier} {mod.stat.upper()}")
+            if ability.conditions:
+                for cond in ability.conditions:
+                    effect_parts.append(cond.condition)
             if "stress" in ability.tags:
                 effect_parts.append("-1 stress")
+            if "movement" in ability.tags:
+                effect_parts.append("safe movement")
 
             effect_str = ", ".join(effect_parts) if effect_parts else "utility"
 
@@ -1378,10 +1384,23 @@ class GameREPL:
                     f"({heal_target.stats.hp_current}/{heal_target.stats.hp_max} HP)"
                 )
 
-        # Handle conditions
-        if ability.conditions:
+        # Handle conditions (Cheap Shot's stun, etc.)
+        if ability.conditions and target:
+            for cond in ability.conditions:
+                duration_str = ""
+                if cond.duration_type == "rounds" and cond.duration_value:
+                    duration_str = f" for {cond.duration_value} round{'s' if cond.duration_value > 1 else ''}"
+                elif cond.duration_type == "until_save":
+                    duration_str = " (save ends)"
+                lines.append(f"  {target.name} is {cond.condition}{duration_str}!")
+        elif ability.conditions:
+            # No target specified for condition ability
             cond_names = [c.condition for c in ability.conditions]
-            lines.append(f"  Conditions applied: {', '.join(cond_names)}")
+            lines.append(f"  Effect: {', '.join(cond_names)}")
+
+        # Handle movement/utility abilities (Disengage, etc.)
+        if "movement" in ability.tags:
+            lines.append("  You can move freely without provoking opportunity attacks this turn.")
 
         return "\n".join(lines)
 
@@ -1935,9 +1954,73 @@ class GameREPL:
             tags=["martial", "recovery", "stress"],
         )
 
+        # =================================================================
+        # Rogue Abilities
+        # =================================================================
+
+        # Sneak Attack - bonus damage when enemy is flanked/distracted
+        sneak_attack = Ability(
+            name="Sneak Attack",
+            description="Strike a distracted foe for devastating damage. Deals +2d6 damage when you have advantage or an ally is adjacent to the target.",
+            source=AbilitySource.MARTIAL,
+            subtype="maneuver",
+            mechanism=MechanismType.FREE,
+            mechanism_details={},
+            damage=DamageEffect(dice="2d6", damage_type="piercing"),
+            targeting=Targeting(type=TargetingType.SINGLE, range_ft=5),
+            action_cost="free",  # Triggers as part of attack
+            tags=["martial", "rogue", "precision", "sneak"],
+            prerequisites=["Target must be flanked or you must have advantage"],
+        )
+
+        # Disengage - safe withdrawal from combat
+        disengage = Ability(
+            name="Disengage",
+            description="Carefully withdraw from combat. Your movement doesn't provoke opportunity attacks this turn.",
+            source=AbilitySource.MARTIAL,
+            subtype="maneuver",
+            mechanism=MechanismType.FREE,
+            mechanism_details={},
+            targeting=Targeting(type=TargetingType.SELF),
+            action_cost="bonus",
+            tags=["martial", "rogue", "movement", "defensive"],
+        )
+
+        # Cheap Shot - stun an enemy with a dirty trick
+        cheap_shot = Ability(
+            name="Cheap Shot",
+            description="A dirty trick that stuns your opponent. Throw sand, strike a nerve, or exploit a moment of distraction.",
+            source=AbilitySource.MARTIAL,
+            subtype="maneuver",
+            mechanism=MechanismType.MOMENTUM,
+            mechanism_details={"momentum_cost": 3},
+            conditions=[
+                ConditionEffect(
+                    condition="stunned",
+                    duration_type="rounds",
+                    duration_value=1,
+                    save_ability="con",
+                )
+            ],
+            targeting=Targeting(type=TargetingType.SINGLE, range_ft=5),
+            action_cost="action",
+            tags=["martial", "rogue", "control", "dirty"],
+        )
+
         # Create resources with abilities and a stress/momentum pool
         resources = EntityResources(
-            abilities=[second_wind, power_strike, shield_wall, cleave, rally],
+            abilities=[
+                # Fighter
+                second_wind,
+                power_strike,
+                shield_wall,
+                cleave,
+                rally,
+                # Rogue
+                sneak_attack,
+                disengage,
+                cheap_shot,
+            ],
             stress_momentum=StressMomentumPool(),
             cooldowns={
                 "Second Wind": CooldownTracker(
