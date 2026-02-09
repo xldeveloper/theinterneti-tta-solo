@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from src.models.ability import (
     Ability,
     AbilitySource,
@@ -13,6 +15,7 @@ from src.models.ability import (
     Targeting,
     TargetingType,
 )
+from src.models.condition import ActiveEffect, DurationType, ModifierType
 from src.models.resources import CooldownTracker, EntityResources, StressMomentumPool
 
 
@@ -464,3 +467,118 @@ class TestControlAbilities:
 
         assert success
         assert pool.momentum == 0
+
+
+class TestActiveEffectPersistence:
+    """Test that stat modifiers create persistent ActiveEffect objects."""
+
+    def test_active_effect_creation(self):
+        """Test creating an ActiveEffect from a stat modifier."""
+        entity_id = uuid4()
+        universe_id = uuid4()
+
+        effect = ActiveEffect(
+            entity_id=entity_id,
+            universe_id=universe_id,
+            stat="ac",
+            modifier=2,
+            modifier_type=ModifierType.BONUS,
+            duration_type=DurationType.ROUNDS,
+            duration_remaining=1,
+        )
+
+        assert effect.stat == "ac"
+        assert effect.modifier == 2
+        assert effect.modifier_type == ModifierType.BONUS
+        assert effect.duration_remaining == 1
+
+    def test_active_effect_tick_expires(self):
+        """Test that ActiveEffect expires after ticking through duration."""
+        effect = ActiveEffect(
+            entity_id=uuid4(),
+            universe_id=uuid4(),
+            stat="ac",
+            modifier=2,
+            modifier_type=ModifierType.BONUS,
+            duration_type=DurationType.ROUNDS,
+            duration_remaining=1,
+        )
+
+        expired = effect.tick()
+
+        assert expired
+        assert effect.duration_remaining == 0
+
+    def test_active_effect_tick_not_expired(self):
+        """Test that ActiveEffect persists when duration remaining."""
+        effect = ActiveEffect(
+            entity_id=uuid4(),
+            universe_id=uuid4(),
+            stat="ac",
+            modifier=2,
+            modifier_type=ModifierType.BONUS,
+            duration_type=DurationType.ROUNDS,
+            duration_remaining=3,
+        )
+
+        expired = effect.tick()
+
+        assert not expired
+        assert effect.duration_remaining == 2
+
+    def test_active_effect_apply_bonus(self):
+        """Test applying a bonus modifier to a stat value."""
+        effect = ActiveEffect(
+            entity_id=uuid4(),
+            universe_id=uuid4(),
+            stat="ac",
+            modifier=2,
+            modifier_type=ModifierType.BONUS,
+            duration_type=DurationType.ROUNDS,
+            duration_remaining=1,
+        )
+
+        result = effect.apply_to_stat(14)
+
+        assert result == 16
+
+    def test_active_effect_apply_penalty(self):
+        """Test applying a penalty modifier to a stat value."""
+        effect = ActiveEffect(
+            entity_id=uuid4(),
+            universe_id=uuid4(),
+            stat="ac",
+            modifier=2,
+            modifier_type=ModifierType.PENALTY,
+            duration_type=DurationType.ROUNDS,
+            duration_remaining=1,
+        )
+
+        result = effect.apply_to_stat(14)
+
+        assert result == 12
+
+    def test_stat_modifier_to_active_effect_mapping(self):
+        """Test that ability stat modifiers map correctly to ActiveEffect fields."""
+        mod = StatModifierEffect(
+            stat="ac",
+            modifier=2,
+            duration_type="rounds",
+            duration_value=1,
+        )
+
+        # Verify the mapping from ability model to condition model
+        effect = ActiveEffect(
+            entity_id=uuid4(),
+            universe_id=uuid4(),
+            stat=mod.stat,
+            modifier=mod.modifier,
+            modifier_type=ModifierType.BONUS if mod.modifier > 0 else ModifierType.PENALTY,
+            duration_type=DurationType.ROUNDS,
+            duration_remaining=mod.duration_value,
+        )
+
+        assert effect.stat == "ac"
+        assert effect.modifier == 2
+        assert effect.modifier_type == ModifierType.BONUS
+        assert effect.duration_remaining == 1

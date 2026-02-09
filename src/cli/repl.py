@@ -9,9 +9,9 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TypedDict
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from src.content import create_starter_world
 from src.db.memory import InMemoryDoltRepository, InMemoryNeo4jRepository
@@ -28,6 +28,7 @@ from src.models.ability import (
     Targeting,
     TargetingType,
 )
+from src.models.condition import ActiveEffect, DurationType, ModifierType
 from src.models.conversation import ConversationContext, DialogueOptions
 from src.models.entity import Entity, EntityType
 from src.models.relationships import Relationship, RelationshipType
@@ -67,6 +68,8 @@ class GameState:
     """Character's resources and known abilities."""
     defy_death_uses: int = 0
     """Number of Defy Death saves used today."""
+    active_effects: list[ActiveEffect] = field(default_factory=list)
+    """Active stat modifier effects (e.g., +2 AC from Brace for Impact)."""
 
 
 @dataclass
@@ -338,10 +341,17 @@ class GameREPL:
                 gold_parts.append(f"{cp}cp")
             gold_str = " ".join(gold_parts)
 
+            ac_mod = self._get_ac_modifier(state)
+            ac_display = character.stats.ac + ac_mod
+            ac_str = str(ac_display)
+            if ac_mod != 0:
+                sign = "+" if ac_mod > 0 else ""
+                ac_str = f"{ac_display} ({character.stats.ac}{sign}{ac_mod})"
+
             lines.extend(
                 [
                     f"  HP: {character.stats.hp_current}/{character.stats.hp_max}",
-                    f"  AC: {character.stats.ac}",
+                    f"  AC: {ac_str}",
                     f"  Level: {character.stats.level}",
                     f"  Gold: {gold_str}",
                 ]
@@ -1299,17 +1309,36 @@ class GameREPL:
         lines = []
         lines.append(f"You use {ability.name}!")
 
-        # Handle stat modifiers (e.g., Shield Wall's +2 AC)
-        if ability.stat_modifiers:
+        # Handle stat modifiers (e.g., Brace for Impact's +2 AC)
+        if ability.stat_modifiers and state.character_id and state.universe_id:
             for mod in ability.stat_modifiers:
                 sign = "+" if mod.modifier > 0 else ""
                 duration = ""
+                dur_type = DurationType.ROUNDS
+                dur_remaining = mod.duration_value
                 if mod.duration_type == "rounds" and mod.duration_value:
                     duration = (
                         f" for {mod.duration_value} round{'s' if mod.duration_value > 1 else ''}"
                     )
                 elif mod.duration_type == "concentration":
                     duration = " (concentration)"
+                    dur_type = DurationType.CONCENTRATION
+                    dur_remaining = None
+
+                # Persist the effect so it applies in combat calculations
+                effect = ActiveEffect(
+                    id=uuid4(),
+                    entity_id=state.character_id,
+                    universe_id=state.universe_id,
+                    stat=mod.stat,
+                    modifier=mod.modifier,
+                    modifier_type=ModifierType.BONUS if mod.modifier > 0 else ModifierType.PENALTY,
+                    duration_type=dur_type,
+                    duration_remaining=dur_remaining,
+                    requires_concentration=(mod.duration_type == "concentration"),
+                )
+                state.active_effects.append(effect)
+
                 lines.append(f"  {mod.stat.upper()} {sign}{mod.modifier}{duration}")
 
         # Handle stress recovery (Rally ability)
@@ -1339,6 +1368,12 @@ class GameREPL:
                             if t.stats.hp_current <= 0:
                                 lines.append(f"  {t.name} is defeated!")
                                 self._remove_entity_from_location(state, t)
+                                loot_note = self._grant_combat_rewards(state, t)
+                                if loot_note:
+                                    lines.append(f"  {loot_note}")
+                                quest_note = self._check_quest_progress(state, "defeat", t.id)
+                                if quest_note:
+                                    lines.append(f"  {quest_note}")
                             else:
                                 lines.append(
                                     f"  {t.name} takes {damage_roll} damage! "
@@ -1352,6 +1387,13 @@ class GameREPL:
                 state.engine.dolt.save_entity(target)
                 if target.stats.hp_current <= 0:
                     lines.append(f"  {target.name} is defeated!")
+                    self._remove_entity_from_location(state, target)
+                    loot_note = self._grant_combat_rewards(state, target)
+                    if loot_note:
+                        lines.append(f"  {loot_note}")
+                    quest_note = self._check_quest_progress(state, "defeat", target.id)
+                    if quest_note:
+                        lines.append(f"  {quest_note}")
                 else:
                     lines.append(
                         f"  {target.name} takes {damage_roll} damage! "
@@ -1389,7 +1431,9 @@ class GameREPL:
             for cond in ability.conditions:
                 duration_str = ""
                 if cond.duration_type == "rounds" and cond.duration_value:
-                    duration_str = f" for {cond.duration_value} round{'s' if cond.duration_value > 1 else ''}"
+                    duration_str = (
+                        f" for {cond.duration_value} round{'s' if cond.duration_value > 1 else ''}"
+                    )
                 elif cond.duration_type == "until_save":
                     duration_str = " (save ends)"
                 lines.append(f"  {target.name} is {cond.condition}{duration_str}!")
@@ -1514,7 +1558,8 @@ class GameREPL:
         if not player:
             return "Could not find your character."
 
-        attacker = self._entity_to_combatant(player)
+        ac_mod = self._get_ac_modifier(state)
+        attacker = self._entity_to_combatant(player, ac_modifier=ac_mod)
         defender = self._entity_to_combatant(target_entity)
 
         result = resolve_attack(attacker, defender, weapon)
@@ -1625,7 +1670,30 @@ class GameREPL:
 
         return enemies
 
-    def _entity_to_combatant(self, entity: Entity) -> Combatant:
+    def _get_ac_modifier(self, state: GameState) -> int:
+        """Get total AC modifier from active effects."""
+        total = 0
+        for effect in state.active_effects:
+            if effect.stat == "ac":
+                if effect.modifier_type == ModifierType.BONUS:
+                    total += effect.modifier
+                elif effect.modifier_type == ModifierType.PENALTY:
+                    total -= effect.modifier
+        return total
+
+    def _tick_active_effects(self, state: GameState) -> list[str]:
+        """Tick all active effects and return messages for expired ones."""
+        expired_msgs = []
+        remaining = []
+        for effect in state.active_effects:
+            if effect.tick():
+                expired_msgs.append(f"  {effect.stat.upper()} modifier expired.")
+            else:
+                remaining.append(effect)
+        state.active_effects = remaining
+        return expired_msgs
+
+    def _entity_to_combatant(self, entity: Entity, *, ac_modifier: int = 0) -> Combatant:
         """Convert Entity to Combatant for combat resolution."""
         stats = entity.stats
         if not stats:
@@ -1633,7 +1701,7 @@ class GameREPL:
 
         return Combatant(
             name=entity.name,
-            ac=stats.ac,
+            ac=stats.ac + ac_modifier,
             abilities=CombatAbilities(
                 str=stats.abilities.str_,
                 dex=stats.abilities.dex,
@@ -1739,7 +1807,8 @@ class GameREPL:
         if not player or not player.stats:
             return []
 
-        defender = self._entity_to_combatant(player)
+        ac_mod = self._get_ac_modifier(state)
+        defender = self._entity_to_combatant(player, ac_modifier=ac_mod)
         lines: list[str] = []
 
         for enemy in enemies:
@@ -1777,6 +1846,10 @@ class GameREPL:
 
                 if player.stats.hp_current <= 0:
                     break  # Player is dead, stop enemy turns
+
+        # Tick active effects at end of round
+        expired_msgs = self._tick_active_effects(state)
+        lines.extend(expired_msgs)
 
         return lines
 
