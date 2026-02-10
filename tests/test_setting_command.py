@@ -8,7 +8,7 @@ from src.cli.repl import GameREPL, GameState
 from src.db.memory import InMemoryDoltRepository, InMemoryNeo4jRepository
 from src.engine import GameEngine
 from src.engine.models import RollSummary, TurnResult
-from src.models.crunch_affinity import CrunchLevel
+from src.models.crunch_affinity import SIGNAL_WEIGHTS, CrunchLevel
 
 
 def _make_state() -> tuple[GameState, GameREPL]:
@@ -85,13 +85,13 @@ def test_setting_unknown_setting_shows_usage():
 def test_slash_attack_records_crunchy_signal():
     state, repl = _make_state()
     weight = repl._command_signal_weight("attack")
-    assert weight == 0.8
+    assert weight == SIGNAL_WEIGHTS["slash_combat"]
 
 
 def test_slash_status_records_info_signal():
     state, repl = _make_state()
     weight = repl._command_signal_weight("status")
-    assert weight == 0.6
+    assert weight == SIGNAL_WEIGHTS["slash_info"]
 
 
 def test_slash_help_is_neutral():
@@ -118,19 +118,19 @@ def test_slash_rest_is_neutral():
 def test_natural_language_specific_keyword():
     state, repl = _make_state()
     weight = repl._natural_language_signal_weight("attack the goblin with my longsword")
-    assert weight == 0.3
+    assert weight == SIGNAL_WEIGHTS["specific_target"]
 
 
 def test_natural_language_simple_action():
     state, repl = _make_state()
     weight = repl._natural_language_signal_weight("I swing at the goblin")
-    assert weight == -0.6
+    assert weight == SIGNAL_WEIGHTS["natural_simple"]
 
 
 def test_natural_language_vague():
     state, repl = _make_state()
     weight = repl._natural_language_signal_weight("I try to sneak past the guards")
-    assert weight == -0.8
+    assert weight == SIGNAL_WEIGHTS["natural_vague"]
 
 
 # --- _format_turn_result crunch level tests ---

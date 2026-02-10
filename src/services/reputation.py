@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from src.db.memory import InMemoryDoltRepository
+from src.db.interfaces import DoltRepository
 
 
 class ReputationChange(BaseModel):
@@ -47,7 +47,7 @@ def get_reputation_tier(score: int) -> str:
 class ReputationService:
     """Applies and queries faction reputation for characters."""
 
-    dolt: InMemoryDoltRepository
+    dolt: DoltRepository
 
     def apply_reputation_changes(
         self,
@@ -96,7 +96,10 @@ class ReputationService:
 
         standings: list[FactionStanding] = []
         for fid_str, score in character.stats.faction_reputations.items():
-            faction_id = UUID(fid_str)
+            try:
+                faction_id = UUID(fid_str)
+            except (ValueError, TypeError):
+                continue
             faction = self.dolt.get_entity(faction_id, universe_id)
             faction_name = faction.name if faction else "Unknown Faction"
 

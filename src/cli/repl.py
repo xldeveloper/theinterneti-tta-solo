@@ -31,7 +31,7 @@ from src.models.ability import (
 )
 from src.models.condition import ActiveEffect, DurationType, ModifierType
 from src.models.conversation import ConversationContext, DialogueOptions
-from src.models.crunch_affinity import CrunchAffinity, CrunchLevel
+from src.models.crunch_affinity import SIGNAL_WEIGHTS, CrunchAffinity, CrunchLevel
 from src.models.entity import Entity, EntityType
 from src.models.relationships import Relationship, RelationshipType
 from src.models.resources import CooldownTracker, EntityResources, StressMomentumPool
@@ -2489,7 +2489,11 @@ class GameREPL:
         return f"Crunch level locked to {level.value}."
 
     def _command_signal_weight(self, cmd_name: str) -> float:
-        """Return the crunch signal weight for a slash command."""
+        """Return the crunch signal weight for a slash command.
+
+        Uses SIGNAL_WEIGHTS from the crunch_affinity module as the single
+        source of truth for weight values.
+        """
         combat_cmds = {
             "attack",
             "fight",
@@ -2514,15 +2518,18 @@ class GameREPL:
             "inv",
             "i",
         }
-        # Neutral commands return 0.0
         if cmd_name in combat_cmds:
-            return 0.8
+            return SIGNAL_WEIGHTS["slash_combat"]
         if cmd_name in info_cmds:
-            return 0.6
+            return SIGNAL_WEIGHTS["slash_info"]
         return 0.0
 
     def _natural_language_signal_weight(self, text: str) -> float:
-        """Return the crunch signal weight for natural language input."""
+        """Return the crunch signal weight for natural language input.
+
+        Uses SIGNAL_WEIGHTS from the crunch_affinity module as the single
+        source of truth for weight values.
+        """
         lower = text.lower()
         # Specific mechanical keywords suggest crunchy intent
         specific_keywords = {
@@ -2563,13 +2570,13 @@ class GameREPL:
         }
         for kw in specific_keywords:
             if kw in lower:
-                return 0.3
+                return SIGNAL_WEIGHTS["specific_target"]
 
         # Simple action verbs with targets
         simple_patterns = {"swing", "hit", "stab", "slash", "shoot", "strike", "punch", "kick"}
         words = set(lower.split())
         if words & simple_patterns:
-            return -0.6
+            return SIGNAL_WEIGHTS["natural_simple"]
 
         # Vague/narrative language
         vague_patterns = {
@@ -2583,10 +2590,10 @@ class GameREPL:
         }
         for vp in vague_patterns:
             if vp in lower:
-                return -0.8
+                return SIGNAL_WEIGHTS["natural_vague"]
 
-        # Default to mildly narrative
-        return -0.6
+        # Default to simple narrative
+        return SIGNAL_WEIGHTS["natural_simple"]
 
     def _is_command(self, text: str) -> bool:
         """Check if input is a special command."""
@@ -2613,10 +2620,8 @@ class GameREPL:
         # Handle special commands
         if self._is_command(text):
             cmd_name, args = self._parse_command(text)
-            # Record crunch signal for slash commands
-            signal = self._command_signal_weight(cmd_name)
-            if signal != 0.0:
-                state.crunch_affinity.record_signal(signal)
+            # Record crunch signal for slash commands (including neutral 0.0)
+            state.crunch_affinity.record_signal(self._command_signal_weight(cmd_name))
             if cmd_name in self.commands:
                 result = self.commands[cmd_name].handler(state, args)
                 if result is not None:
@@ -2688,9 +2693,9 @@ class GameREPL:
             if result.rolls:
                 for roll in result.rolls:
                     if roll.is_critical:
-                        parts.append("\n**A critical strike!**")
+                        parts.append("A critical strike!")
                     elif roll.is_fumble:
-                        parts.append("\n**A terrible fumble!**")
+                        parts.append("A terrible fumble!")
         elif crunch_level == CrunchLevel.BALANCED:
             # Balanced mode: compact roll totals
             if result.rolls:
