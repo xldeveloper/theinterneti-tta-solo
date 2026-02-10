@@ -77,6 +77,10 @@ class EntityStats(BaseModel):
     level: int = Field(default=1, ge=1)
     experience: int = Field(default=0, ge=0)
     gold_copper: int = Field(default=0, ge=0, description="Wealth in copper pieces")
+    faction_reputations: dict[str, int] = Field(
+        default_factory=dict,
+        description="Faction UUID string → reputation score",
+    )
 
 
 class ItemProperties(BaseModel):

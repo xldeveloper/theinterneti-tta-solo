@@ -37,6 +37,7 @@ from src.models.resources import CooldownTracker, EntityResources, StressMomentu
 from src.services.conversation import ConversationService
 from src.services.npc import NPCService
 from src.services.quest import QuestService
+from src.services.reputation import ReputationService
 from src.services.universe_generator import UniverseGenerator
 from src.skills.combat import Abilities as CombatAbilities
 from src.skills.combat import Combatant, Weapon, WeaponProperty, resolve_attack
@@ -232,6 +233,12 @@ class GameREPL:
                 description="Take a defensive stance (enemies attack at disadvantage)",
                 handler=self._cmd_defend,
             ),
+            Command(
+                name="reputation",
+                aliases=["rep", "factions"],
+                description="Show your faction standings",
+                handler=self._cmd_reputation,
+            ),
         ]
 
         for cmd in commands:
@@ -379,6 +386,35 @@ class GameREPL:
 
         if character.description:
             lines.extend(["", f"  {character.description}"])
+
+        if character.stats and character.stats.faction_reputations:
+            rep_service = ReputationService(state.engine.dolt)
+            standings = rep_service.get_standings(state.character_id, state.universe_id)
+            if standings:
+                best = max(standings, key=lambda s: s.score)
+                lines.append(
+                    f"\n  Faction Standings: {len(standings)} faction"
+                    f"{'s' if len(standings) != 1 else ''}"
+                    f" (highest: {best.faction_name} \u2014 {best.tier})"
+                )
+
+        return "\n".join(lines)
+
+    def _cmd_reputation(self, state: GameState, args: list[str]) -> str | None:
+        """Handle reputation command."""
+        if state.character_id is None or state.universe_id is None:
+            return "No character loaded."
+
+        rep_service = ReputationService(state.engine.dolt)
+        standings = rep_service.get_standings(state.character_id, state.universe_id)
+
+        if not standings:
+            return "You haven't built a reputation with any factions yet."
+
+        lines = ["Faction Standings", "-" * 30]
+        for s in sorted(standings, key=lambda x: x.score, reverse=True):
+            sign = "+" if s.score >= 0 else ""
+            lines.append(f"  {s.faction_name:<20} {sign}{s.score}  ({s.tier})")
 
         return "\n".join(lines)
 
@@ -2262,6 +2298,20 @@ class GameREPL:
                     )
                 else:
                     notifications.append("\n[Quest completed!]")
+
+                if rewards.reputation_changes and state.character_id and state.universe_id:
+                    rep_service = ReputationService(state.engine.dolt)
+                    rep_changes = rep_service.apply_reputation_changes(
+                        state.character_id,
+                        state.universe_id,
+                        rewards.reputation_changes,
+                    )
+                    for change in rep_changes:
+                        sign = "+" if change.delta > 0 else ""
+                        notifications.append(
+                            f"\n[{change.faction_name} reputation: "
+                            f"{sign}{change.delta} \u2192 {change.tier}]"
+                        )
 
         return "".join(notifications)
 
